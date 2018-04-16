@@ -2,12 +2,12 @@
 
 Dependencies: Eigen3, gcc, g++
 
-**Install dependencies:
+**Install dependencies:**
 
 sudo apt-get install libeigen3-dev gcc g++ cmake
 
 
-**To install project (recommended):
+**To install project (recommended):**
 
 mkdir build
 
@@ -18,7 +18,7 @@ cmake ..
 make
 
 
-**To run the project:
+**To run the project:**
 
 cd build
 
