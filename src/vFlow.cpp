@@ -61,17 +61,17 @@ vFlowManager::vFlowManager(int height, int width, int filterSize,
 	flowSurfaceVy = EventMatrix<double> (width, height, 0);
 
 
-	//lastFlowTime = Eigen::MatrixXd(width, height);
-	lastFlowTime = EventMatrix<double>  (width, height, 0.0);
-	lastFlowTime.resize(width, height, 0.0);
+	//lastEventTime = Eigen::MatrixXd(width, height);
+	lastEventTime = EventMatrix<double>  (width, height, 0.0);
+	lastEventTime.resize(width, height, 0.0);
 
 
-	windowJump = 10; // 10
-	maxWindow = 100; //100
+	windowJump = width/40; // 10
+	maxWindow = width/2; //100
 
-    eventsComputed = 0;
-    eventsPotential = 0;
-    bottleCount = 0;
+  eventsComputed = 0;
+  eventsPotential = 0;
+  bottleCount = 0;
 
 	Event *tmp = new Event(0, 0, 0, 0);
     //create our surface in synchronous mode
@@ -94,7 +94,7 @@ vFlowManager::vFlowManager(int height, int width, int filterSize,
 
 	if(DEBUGMODE)
 	{
- 		std::cout << "[debug in Run] : size of lastFlowTime is [sx sy]: [" << lastFlowTime.dim_a() << " " << lastFlowTime.dim_b() << "]" << std::endl;
+ 		std::cout << "[debug in Run] : size of lastEventTime is [sx sy]: [" << lastEventTime.dim_a() << " " << lastEventTime.dim_b() << "]" << std::endl;
     	std::cout << "[debug] : End creating vFlowManager object" << std::endl;
 	}
 
@@ -103,7 +103,7 @@ vFlowManager::vFlowManager(int height, int width, int filterSize,
 }
 
 /******************************************************************************/
-bool vFlowManager::run(int NUMEVENTS)
+bool vFlowManager::run(unsigned long int NUMEVENTS)
 {
 
 	if(DEBUGMODE)
@@ -120,7 +120,7 @@ bool vFlowManager::run(int NUMEVENTS)
 	eventsFileOut.open (outFileName.c_str());
 
 	double i = 0;
-	int x; int y; unsigned int time; int pol;
+	int x; int y; unsigned int time_; int pol;
 
 	fileNameInput = fileNameInput + ".txt";
 	std::string line;
@@ -129,9 +129,13 @@ bool vFlowManager::run(int NUMEVENTS)
 
 	std::ifstream eventsFile (fileNameInput.c_str());
 
+  eventsFile.seekg(0, std::ios::beg);
 	std::streampos fsize = eventsFile.tellg();
 	eventsFile.seekg( 0, std::ios::end );
 	fsize = eventsFile.tellg() - fsize;
+
+  
+  NUMEVENTS = (unsigned long int) (std::min(double(NUMEVENTS), double(fsize/18)));
 
 	eventsFile.seekg(0, std::ios::beg);
 
@@ -140,6 +144,8 @@ bool vFlowManager::run(int NUMEVENTS)
 		std::cout << "[debug in Run] : Done setting initial values " << std::endl;
 
 		std::cout << "[debug in Run] : Max window value " << maxWindow << std::endl;
+
+
 	}
 
 	Event *currentEvent = new Event(0, 0, 0, 0);
@@ -152,31 +158,29 @@ bool vFlowManager::run(int NUMEVENTS)
 
 		stream >> x;
 		stream >> y;
-		stream >> time;
+		stream >> time_;
 		stream >> pol;
 
 		currentEvent->setX(x);
 		currentEvent->setY(y);
-		currentEvent->setStamp(time);
+		currentEvent->setStamp(time_);
 		currentEvent->setPolarity(pol);
 
 		if(DEBUGMODE)
 		{
 			std::cout << "[debug in Run] : First event " << std::endl;
 		}
-		unsigned int t0 = time;
+		unsigned int t0 = time_;
 
 		if(DEBUGMODE)
 		{
-			std::cout << "[debug in Run] : First event - initial event [x y p t]: [" << x << " " << y << " " << pol << " " << time << "]" << std::endl;
+			std::cout << "[debug in Run] : First event - initial event [x y p t]: [" << x << " " << y << " " << pol << " " << time_ << "]" << std::endl;
 		}
-		//std::cout << "[debug in Run] : Width Height [" << width << " " << height << "]" << std::endl;
-		//std::cout << "[debug in Run] : size of lastFlowTime is [sx sy]: [" << this->lastFlowTime.dim_a() << " " << lastFlowTime.dim_b() << "]" << std::endl;
-		this->lastFlowTime[x][y] = time;
+		lastEventTime[x][y] = time_;
 
 		if(DEBUGMODE)
 		{
-			std::cout << "[debug in Run] : While events loop - Set up lastFlowTime[x][y] " << std::endl;
+			std::cout << "[debug in Run] : While events loop - Set up lastEventTime[x][y] " << std::endl;
 		}
 
 	    while (getline (eventsFile,line) && eventsComputed <= NUMEVENTS)
@@ -186,17 +190,17 @@ bool vFlowManager::run(int NUMEVENTS)
 
 			stream >> x;
 			stream >> y;
-			stream >> time;
-			time = time - t0;
+			stream >> time_;
+			time_ = time_ - t0;
 
 			stream >> pol;
-			if(pol == -1)
+			if(pol < 0)
 				pol = 0;
 			//pol = pol+1;
 
 			currentEvent->setX(x);
 			currentEvent->setY(y);
-			currentEvent->setStamp(time);
+			currentEvent->setStamp(time_);
 			currentEvent->setPolarity(pol);
 
 			if(DEBUGMODE)
@@ -220,22 +224,18 @@ bool vFlowManager::run(int NUMEVENTS)
 			{
 				surfaceOfL[x][y] = *currentEvent;
 				//cSurf.resize(width, height, currentEvent);
-			    cSurf = surfaceOfL;
+		    cSurf = surfaceOfL;
 			}
-
-			//if(pol == 1)
-			//	std::cout << x << " " << y << " " << time << " " << pol << std::endl;
-
 			i++;
-//			}
+
 
 			//cSurf.setMostRecent(currentEvent);
 			//std::cout << "Computing flow" << std::endl;
 
 			//if(pol == 0)
-			FlowEvent ofe = compute();
+			FlowEvent ofe = computeLocalFlow();
 
-		    if(~std::isnan(abs(ofe.getVx())) && !std::isnan(abs(ofe.getVy())) && ofe.getVx() != 0 && ofe.getVy() != 0)
+	    if(!std::isnan(abs(ofe.getVx())) && !std::isnan(abs(ofe.getVy())) && ofe.getVx() != 0 && ofe.getVy() != 0) // check that optical flow event is valid
 			{
 
 				//std::cout << pol << std::endl;
@@ -250,7 +250,7 @@ bool vFlowManager::run(int NUMEVENTS)
 				//std::cout << x << " " << y << " " << pol << " " << length << " " << theta << std::endl;
 
 
-				 if(pol == 1)
+ 			  if(pol == 1) // ON EVENTS
 				{
 					//cSurf = surfaceOnL;
 					flowSurfaceLengthOn[x][y] = length;
@@ -263,7 +263,7 @@ bool vFlowManager::run(int NUMEVENTS)
 					//flowSurfaceThetaOn(x, y) = theta_0_2pi;
 
 				}
-				else
+				else // OFF EVENTS
 				{
 					//cSurf = surfaceOfL;
 					//flowSurfaceLengthOn[x][y] = length;
@@ -276,45 +276,46 @@ bool vFlowManager::run(int NUMEVENTS)
 					flowSurfaceVy[x][y] = ofe.getVy();
 				}
 
-				FlowEvent trueFlow = computeTrueFlow(x, y, time, pol);
+				FlowEvent trueFlow = computeTrueFlow(x, y, time_, pol);
+
+        double trueLength = sqrt(trueFlow.getVy()*trueFlow.getVy() + trueFlow.getVx()*trueFlow.getVx());
+        double trueAngle = atan2(trueFlow.getVy(), trueFlow.getVx());
 
 				//std::cout << "{DEBUG}: Compute true flow (" <<  trueFlow.getVx() << " " << trueFlow.getVy() << ")" << std::endl;
 
 				if(pol == 1)
 				{
-					eventsFileOut << x << " " << y << " " << time << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
-					//std::cout << "{DEBUG}: Writing to file " << x << " " << y << " " << time << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
+					eventsFileOut << x << " " << y << " " << time_ << " " << 1 << " " << length << " " << trueAngle << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
+					//std::cout << "{DEBUG}: Writing to file " << x << " " << y << " " << time_ << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
 				}
 				else{
-					eventsFileOut << x << " " << y << " " << time << " " << -1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
-					//std::cout << "{DEBUG}: Writing to file " << x << " " << y << " " << time << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
+					eventsFileOut << x << " " << y << " " << time_ << " " << -1 << " " << length << " " << trueAngle << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
+					//std::cout << "{DEBUG}: Writing to file " << x << " " << y << " " << time_ << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
 				}
-
 
 				// /*
 				if(pol == 1)
 				{
-					flowSurfaceLengthOn[x][y] = trueFlow.getX();
-					flowSurfaceThetaOn[x][y] = trueFlow.getY();
+					flowSurfaceLengthOn[x][y] = trueLength;
+					flowSurfaceThetaOn[x][y] = trueAngle;
 				}
 				else
 				{
 
-					flowSurfaceLengthOf[x][y] = trueFlow.getX();
-					flowSurfaceThetaOf[x][y] = trueFlow.getY();
+					flowSurfaceLengthOf[x][y] = trueLength;
+					flowSurfaceThetaOf[x][y] = trueAngle;
 
-					flowSurfaceLengthOn[x][y] = trueFlow.getX();
-					flowSurfaceThetaOn[x][y] = trueFlow.getY();
+//					flowSurfaceLengthOn[x][y] = trueFlow.getVx();
+//					flowSurfaceThetaOn[x][y] = trueFlow.getVy();
 				}
 				// */
 			}
 			else{
 
 				if(pol ==1)
-					eventsFileOut << x << " " << y << " " << time << " " << 1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
+					eventsFileOut << x << " " << y << " " << time_ << " " << 1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
 				else
-					eventsFileOut << x << " " << y << " " << time << " " << -1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
-
+					eventsFileOut << x << " " << y << " " << time_ << " " << -1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
 
 
 				// /*
@@ -327,285 +328,15 @@ bool vFlowManager::run(int NUMEVENTS)
 				{
 					flowSurfaceLengthOf[x][y] = 0;
 					flowSurfaceThetaOf[x][y] = 0;
-
-					flowSurfaceLengthOn[x][y] = 0;
-					flowSurfaceThetaOn[x][y] = 0;
 				}
 					// */
 			}
 
 //			std::cout << aep->getPolarity() << std::endl;
 
-			lastFlowTime[x][y] = time;
-	      	eventsComputed++;
-			std::cout << "Percentage complete: " << double((100*eventsComputed)/(NUMEVENTS)) << "%" << " "  << '\r';
-	    }
-	    eventsFile.close();
-	  }
-	 else std::cout << "Unable to open file" << std::endl;
-
-	 eventsFileOut.close();
-	 std::cout << std::endl << "Done!" << std::endl;
-	 exit(0);
-
-
-    //std::string inPortName = "/" + moduleName + "/vBottl:i";
-    //bool check1 = BufferedPort<emorph::vBottle>::open(inPortName);
-
-    //if(strictness) outPort.setStrict();
-    //std::string outPortName = "/" + moduleName + "/vBottle:o";
-    //bool check2 = outPort.open(outPortName);
-
-//    Eigen::MatrixXd q = new Eigen::MatrixXd()
-//    vf = new Eigen::VectorXd();
- //       vf->setVx(dtdx);
- //      vf->setVy(dtdy);
- //       vf->setDeath();
-
-    return true; //check1 && check2;
-
-
-}
-
-/******************************************************************************/
-bool vFlowManager::run()
-{
-
-	if(DEBUGMODE)
-	{
-		std::cout << "[debug] : Begin run" << std::endl;
-
-		std::cout << "[debug in Run] : Setting up initial values " << std::endl;
-	}
-
-	std::string outFileName = "";
-	outFileName = fileNameInput + "_FARMSOut.txt";
-
-	std::ofstream eventsFileOut;
-	eventsFileOut.open (outFileName.c_str());
-
-	double i = 0;
-	int x; int y; unsigned int time; int pol;
-
-	fileNameInput = fileNameInput + ".txt";
-	std::string line;
-
-	std::cout << fileNameInput << std::endl;
-
-	std::ifstream eventsFile (fileNameInput.c_str());
-
-	std::streampos fsize = eventsFile.tellg();
-	eventsFile.seekg( 0, std::ios::end );
-	fsize = eventsFile.tellg() - fsize;
-
-	eventsFile.seekg(0, std::ios::beg);
-
-	if(DEBUGMODE)
-	{
-		std::cout << "[debug in Run] : Done setting initial values " << std::endl;
-
-		std::cout << "[debug in Run] : Max window value " << maxWindow << std::endl;
-	}
-
-	Event *currentEvent = new Event(0, 0, 0, 0);
-	cSurf = EventMatrix<Event> (width, height, *currentEvent);
-
-	  if (eventsFile.is_open())
-	  {
-		getline (eventsFile,line);
-		std::stringstream stream(line);
-
-		stream >> x;
-		stream >> y;
-		stream >> time;
-		stream >> pol;
-
-		currentEvent->setX(x);
-		currentEvent->setY(y);
-		currentEvent->setStamp(time);
-		currentEvent->setPolarity(pol);
-
-		if(DEBUGMODE)
-		{
-			std::cout << "[debug in Run] : First event " << std::endl;
-		}
-		unsigned int t0 = time;
-
-		if(DEBUGMODE)
-		{
-			std::cout << "[debug in Run] : First event - initial event [x y p t]: [" << x << " " << y << " " << pol << " " << time << "]" << std::endl;
-		}
-		//std::cout << "[debug in Run] : Width Height [" << width << " " << height << "]" << std::endl;
-		//std::cout << "[debug in Run] : size of lastFlowTime is [sx sy]: [" << this->lastFlowTime.dim_a() << " " << lastFlowTime.dim_b() << "]" << std::endl;
-		this->lastFlowTime[x][y] = time;
-
-		if(DEBUGMODE)
-		{
-			std::cout << "[debug in Run] : While events loop - Set up lastFlowTime[x][y] " << std::endl;
-		}
-
-	    while (getline (eventsFile,line) )
-	    {
-
-			std::stringstream stream(line);
-
-			stream >> x;
-			stream >> y;
-			stream >> time;
-			time = time - t0;
-
-			stream >> pol;
-			if(pol == -1)
-				pol = 0;
-			//pol = pol+1;
-
-			currentEvent->setX(x);
-			currentEvent->setY(y);
-			currentEvent->setStamp(time);
-			currentEvent->setPolarity(pol);
-
-			if(DEBUGMODE)
-			{
-				std::cout << "[debug in Run] : Set current event " << std::endl;
-			}
-
-			lastEvent = *currentEvent;
-
-			//cSurf[x][y] = *currentEvent;
-			//cSurf.setMostRecent(*currentEvent);
-
-			if(pol == 1)
-			{
-				surfaceOnL[x][y] = *currentEvent;
-				//cSurf.clear();
-				//cSurf.resize(width, height, 0);
-				cSurf = surfaceOnL;
-			}
-			else
-			{
-				surfaceOfL[x][y] = *currentEvent;
-				//cSurf.resize(width, height, currentEvent);
-			    cSurf = surfaceOfL;
-			}
-
-			//if(pol == 1)
-			//	std::cout << x << " " << y << " " << time << " " << pol << std::endl;
-
-			i++;
-//			}
-
-			//cSurf.setMostRecent(currentEvent);
-			//std::cout << "Computing flow" << std::endl;
-
-			//if(pol == 0)
-			FlowEvent ofe = compute();
-
-		  if(~std::isnan(abs(ofe.getVx())) && !std::isnan(abs(ofe.getVy())) && ofe.getVx() != 0 && ofe.getVy() != 0)
-			{
-
-				//std::cout << pol << std::endl;
-				//std::cout << "Got flow" << " ";
-				//std::cout << "vFlow event occurd " << ofe[0] << std::endl;
-				//std::cout << "Percentage complete: " << int((i*100*18.37)/(fsize)) << "%" << " "  << '\r';
-				// basic file operations
-
-				double length = sqrt( (ofe.getVx()*ofe.getVx() + ofe.getVy()*ofe.getVy()));
-				double theta = atan2(ofe.getVy(), ofe.getVx());
-
-				//std::cout << x << " " << y << " " << pol << " " << length << " " << theta << std::endl;
-
-
-				 if(pol == 1)
-				{
-					//cSurf = surfaceOnL;
-					flowSurfaceLengthOn[x][y] = length;
-					flowSurfaceThetaOn[x][y] = theta;
-
-					flowSurfaceVx[x][y] = ofe.getVx();
-					flowSurfaceVy[x][y] = ofe.getVy();
-
-					//double theta_0_2pi = theta - floor(theta/(2*M_PI))*theta;
-					//flowSurfaceThetaOn(x, y) = theta_0_2pi;
-
-				}
-				else
-				{
-					//cSurf = surfaceOfL;
-					//flowSurfaceLengthOn[x][y] = length;
-					//flowSurfaceThetaOn[x][y] = theta;
-
-					flowSurfaceLengthOf[x][y] = length;
-					flowSurfaceThetaOf[x][y] = theta;
-
-					flowSurfaceVx[x][y] = ofe.getVx();
-					flowSurfaceVy[x][y] = ofe.getVy();
-				}
-
-        //trueFlow = FlowEvent(x, y, time, pol, 0, 0);
-        //std::cout <<"[Debug run()]: theta_corrected: " << trueFlow.getVy() << std::endl;
-				FlowEvent trueFlow = computeTrueFlow(x, y, time, pol);
-
-				//std::cout << "{DEBUG}: Compute true flow (" <<  trueFlow.getVx() << " " << trueFlow.getVy() << ")" << std::endl;
-
-				if(pol == 1)
-				{
-					eventsFileOut << x << " " << y << " " << time << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
-					//std::cout << "{DEBUG}: Writing to file " << x << " " << y << " " << time << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
-				}
-				else{
-					eventsFileOut << x << " " << y << " " << time << " " << -1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
-					//std::cout << "{DEBUG}: Writing to file " << x << " " << y << " " << time << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
-				}
-
-
-				// /*
-				if(pol == 1)
-				{
-					flowSurfaceLengthOn[x][y] = trueFlow.getVx();
-					flowSurfaceThetaOn[x][y] = trueFlow.getVy();
-				}
-				else
-				{
-
-					flowSurfaceLengthOf[x][y] = trueFlow.getVx();
-					flowSurfaceThetaOf[x][y] = trueFlow.getVy();
-
-					//flowSurfaceLengthOn[x][y] = trueFlow.getX();
-					//flowSurfaceThetaOn[x][y] = trueFlow.getY();
-				}
-				// */
-			}
-			else{
-
-				if(pol ==1)
-					eventsFileOut << x << " " << y << " " << time << " " << 1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
-				else
-					eventsFileOut << x << " " << y << " " << time << " " << -1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
-
-
-
-				// /*
-				if(pol == 1)
-				{
-					flowSurfaceLengthOn[x][y] = 0;
-					flowSurfaceThetaOn[x][y] = 0;
-				}
-				else
-				{
-					flowSurfaceLengthOf[x][y] = 0;
-					flowSurfaceThetaOf[x][y] = 0;
-
-					//flowSurfaceLengthOn[x][y] = 0;
-					//flowSurfaceThetaOn[x][y] = 0;
-				}
-					// */
-			}
-
-//			std::cout << aep->getPolarity() << std::endl;
-
-			lastFlowTime[x][y] = time;
+			lastEventTime[x][y] = time_;
       eventsComputed++;
-      std::cout << "Percentage complete: " << double((100*20*eventsComputed)/(fsize)) << "%" << ". Total Events:  "  << eventsComputed << '\r';
+			std::cout << "Percentage complete: " << double((100*eventsComputed)/(NUMEVENTS)) << "%" << " "  << '\r';
 	    }
 	    eventsFile.close();
 	  }
@@ -647,7 +378,7 @@ void vFlowManager::close()
 
 /******************************************************************************/
 #define COS135on2 0.38268
-FlowEvent vFlowManager::compute()
+FlowEvent vFlowManager::computeLocalFlow()
 {
 
 	if(DEBUGMODE)
@@ -737,7 +468,7 @@ FlowEvent vFlowManager::compute()
 	// = cSurf(besti, bestj, fRad);
 
     //and compute the flow
-        if(computeGrads(subsurf, vr, dtdy, dtdx) >= minEvtsOnPlane)
+        if(computeGrads(subsurf, vr, dtdy, dtdx) >= minEvtsOnPlane) //if inliers more than threshold set flow
         {
           //std::cout << "compute grad " << vr[0] << " " << vr[1] << " " << vr->getPolarity() << std::endl;
           vf = new FlowEvent(vr.getX(), vr.getY(), vr.getStamp(), vr.getPolarity(), 0, 0);
@@ -762,19 +493,19 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
 		std::cout << "[debug] : Entering computeTrueFlow(timed)" << std::endl;
 	}
 
-	//std::cout << "in compute true flow time based" << std::endl;
+	//std::cout << "in compute true flow time_ based" << std::endl;
 	double KILL_OLD_FLOW_TIME = 5000;
 
 	FlowEvent *outFlow =  new FlowEvent(x, y, timeEvent_, pol, 0, 0);
 	//outFlow = Eigen::VectorXd(2);
 
-	std::vector<double> spatialPool(width);
+	std::vector<double> spatialPool(maxWindow, 0);
 
-	std::vector<double> spatialTheta(width);
+	std::vector<double> spatialTheta(maxWindow, 0);
 
-	std::vector<double> spatialVectorX(width);
+	std::vector<double> spatialVectorX(maxWindow, 0);
 
-	std::vector<double> spatialVectorY(width);
+	std::vector<double> spatialVectorY(maxWindow, 0);
 	//int windowJump = 1;
 	//int maxWindow = 8; // declared as global now
 
@@ -785,102 +516,214 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
 
 	double numWindows = 0;
 
-	for (int spatialSize = 0; spatialSize <= maxWindow; spatialSize+=windowJump)
-	{
+  if(pol == 1)
+  {
+  	for (int spatialSize = 0; spatialSize <= maxWindow; spatialSize+=windowJump)
+  	{
 
-		double thetaSpatial = 0;
-		double lengthSpatial = 0;
-		double spatialX = 0;
-		double spatialY = 0;
+  		double thetaSpatial = 0;
+  		double lengthSpatial = 0;
+  		double spatialX = 0;
+  		double spatialY = 0;
 
-		double numNeighbors = 0;
-
-
-		for(int i = std::max(0, x-spatialSize); i <= std::min(x+spatialSize, width-1) ; i++)
-		{
-			for(int j = std::max(0, y-spatialSize); j <= std::min(y+spatialSize, width-1); j++)
-			{
-				if(flowSurfaceLengthOn[i][j] > 0 && (abs(timeEvent_-lastFlowTime[i][j]) < KILL_OLD_FLOW_TIME))
-				{
-					lengthSpatial = lengthSpatial + flowSurfaceLengthOn[i][j]; //*exp(-abs(double(timeEvent_-lastFlowTime(x,y)))/KILL_OLD_FLOW_TIME);
-					//std::cout << pol << " " << abs(double(timeEvent_-lastFlowTime(x,y))) << " " << exp(-abs(double(timeEvent_-lastFlowTime(x,y)))/KILL_OLD_FLOW_TIME) << std::endl;
-
-					spatialX = spatialX + flowSurfaceVx[i][j] ; //flowSurfaceLengthOn(i, j)*cos(flowSurfaceThetaOn(i, j));
-					spatialY = spatialY + flowSurfaceVy[i][j] ; //flowSurfaceLengthOn(i, j)*sin(flowSurfaceThetaOn(i, j));
-
-					thetaSpatial = thetaSpatial + flowSurfaceThetaOn[i][j];
-					numNeighbors++;
-
-					if(flowSurfaceLengthOn[i][j] > maxLength)
-					{
-						maxLength = flowSurfaceLengthOn[i][j];
-						bestTheta = flowSurfaceThetaOn[i][j];
-					}
-				}
-			}
-		}
-
-		if(numNeighbors > 0)
-		{
-			spatialPool.at(numWindows) = lengthSpatial/numNeighbors;
-			spatialTheta.at(numWindows) = thetaSpatial/numNeighbors; //bestTheta; //
-			spatialVectorX.at(numWindows) = spatialX/numNeighbors;
-			spatialVectorY.at(numWindows) = spatialY/numNeighbors;
-		}
-		else
-		{
-			spatialPool.at(numWindows) = 0;
-			spatialTheta.at(numWindows) = 0;
-			spatialVectorX.at(numWindows) = 0;
-			spatialVectorY.at(numWindows) = 0;
-		}
-
-		//std::cout << spatialPool(numWindows) << " " ;
-		numWindows++;
-	}
-
-	double maxVal = 0;
-	int maxValIndex = 0;
+  		double numNeighbors = 0;
 
 
+  		for(int i = std::max(0, x-spatialSize); i <= std::min(x+spatialSize, width-1) ; i++) //search in spatial range
+  		{
+  			for(int j = std::max(0, y-spatialSize); j <= std::min(y+spatialSize, width-1); j++)
+  			{
+  				if(flowSurfaceLengthOn[i][j] > 0 && (abs(timeEvent_-lastEventTime[i][j]) < KILL_OLD_FLOW_TIME))
+          //std::cout << "[Debug (computeTrueFlow) ] timeDiff: " << abs(timeEvent_-lastEventTime[i][j]) << std::endl;
+  				{
+  					lengthSpatial = lengthSpatial + flowSurfaceLengthOn[i][j];
 
-	for (int spt = 0; spt < numWindows; spt++)
-	{
-		if( spatialPool.at(spt) > maxVal)
-		{
-			maxVal = spatialPool.at(spt);
-			maxValIndex = spt;
-		}
-	}
+  					spatialX = spatialX + flowSurfaceLengthOn[i][j]*cos(flowSurfaceThetaOn[i][j]); //flowSurfaceVx[i][j] ; //flowSurfaceLengthOn(i, j)*cos(flowSurfaceThetaOn(i, j));
+  					spatialY = spatialY + flowSurfaceLengthOn[i][j]*sin(flowSurfaceThetaOn[i][j]); //flowSurfaceVy[i][j] ; //flowSurfaceLengthOn(i, j)*sin(flowSurfaceThetaOn(i, j));
 
-	//set flow to max rather than max(mean)
-	//outFlow(0) = maxLength;
-	//outFlow(1) = bestTheta;
+  					thetaSpatial = thetaSpatial + flowSurfaceThetaOn[i][j];
 
-	//use max of mean
-	// /*
-	if(maxVal > 0)
-	{
-		outFlow->setVx(flowSurfaceLengthOn[x][y]);
-		//outFlow(1) = spatialTheta(maxValIndex);
-		outFlow->setVy(atan2(spatialVectorY.at(maxValIndex), spatialVectorX.at(maxValIndex)));
+  					numNeighbors++;
 
-		if(DEBUGMODE)
-		{
-			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << atan2(spatialVectorY.at(maxValIndex), spatialVectorX.at(maxValIndex)) << std::endl;
-		}
+  					if(flowSurfaceLengthOn[i][j] > maxLength)
+  					{
+  						maxLength = flowSurfaceLengthOn[i][j];
+  						bestTheta = flowSurfaceThetaOn[i][j];
+  					}
+  				}
+  			}
+  		}
 
-	}
-	else
-	{
-		outFlow->setVx(flowSurfaceLengthOn[x][y]);
-		outFlow->setVy(flowSurfaceThetaOn[x][y]);
+  		if(numNeighbors > 0)
+  		{
+  			spatialPool.at(numWindows) = lengthSpatial/numNeighbors;
+  			spatialTheta.at(numWindows) = thetaSpatial/numNeighbors; //bestTheta; //
+  			spatialVectorX.at(numWindows) = spatialX/numNeighbors;
+  			spatialVectorY.at(numWindows) = spatialY/numNeighbors;
+  		}
+  		else
+  		{
+  			spatialPool.at(numWindows) = 0;
+  			spatialTheta.at(numWindows) = 0;
+  			spatialVectorX.at(numWindows) = 0;
+  			spatialVectorY.at(numWindows) = 0;
+  		}
 
-		if(DEBUGMODE)
-		{
-			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << flowSurfaceLengthOn[x][y] << " " << flowSurfaceThetaOn[x][y] << std::endl;
-		}
-	}
+  		//std::cout << spatialPool(numWindows) << " " ;
+  		numWindows++;
+  	}
+
+  	double maxVal = 0;
+  	int maxValIndex = 0;
+
+
+
+  	for (int spt = 0; spt < numWindows; spt++)
+  	{
+  		if( spatialPool.at(spt) > maxVal)
+  		{
+  			maxVal = spatialPool.at(spt);
+  			maxValIndex = spt;
+  		}
+  	}
+
+  	//set flow to max rather than max(mean)
+  	//outFlow(0) = maxLength;
+  	//outFlow(1) = bestTheta;
+
+  	//use max of mean
+  	// /*
+  	if(maxVal > 0)
+  	{
+//  		outFlow->setVx(flowSurfaceLengthOn[x][y]*cos());
+//  		outFlow->setVy(atan2(spatialVectorY.at(maxValIndex), spatialVectorX.at(maxValIndex)));
+
+      outFlow->setVx(spatialVectorX.at(maxValIndex));
+      outFlow->setVy(spatialVectorY.at(maxValIndex));
+      //outFlow->setVx(maxLength);
+  		//outFlow->setVy(bestTheta);
+
+  		if(DEBUGMODE)
+  		{
+  			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << atan2(spatialVectorY.at(maxValIndex), spatialVectorX.at(maxValIndex)) << std::endl;
+  		}
+
+  	}
+  	else
+  	{
+  		outFlow->setVx(flowSurfaceLengthOn[x][y]*cos(flowSurfaceThetaOn[x][y]));
+  		outFlow->setVy(flowSurfaceLengthOn[x][y]*sin(flowSurfaceThetaOn[x][y]));
+
+  		if(DEBUGMODE)
+  		{
+  			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << flowSurfaceLengthOn[x][y] << " " << flowSurfaceThetaOn[x][y] << std::endl;
+  		}
+  	}
+  }
+
+  else //off events
+
+  {
+    for (int spatialSize = 0; spatialSize <= maxWindow; spatialSize+=windowJump)
+  	{
+
+  		double thetaSpatial = 0;
+  		double lengthSpatial = 0;
+  		double spatialX = 0;
+  		double spatialY = 0;
+
+  		double numNeighbors = 0;
+
+
+  		for(int i = std::max(0, x-spatialSize); i <= std::min(x+spatialSize, width-1) ; i++) //search in spatial range
+  		{
+  			for(int j = std::max(0, y-spatialSize); j <= std::min(y+spatialSize, width-1); j++)
+  			{
+  				if(flowSurfaceLengthOn[i][j] > 0 && (abs(timeEvent_-lastEventTime[i][j]) < KILL_OLD_FLOW_TIME))
+          //std::cout << "[Debug (computeTrueFlow) ] timeDiff: " << abs(timeEvent_-lastEventTime[i][j]) << std::endl;
+  				{
+  					lengthSpatial = lengthSpatial + flowSurfaceLengthOf[i][j];
+
+  					spatialX = spatialX + flowSurfaceLengthOf[i][j]*cos(flowSurfaceThetaOf[i][j]); //flowSurfaceVx[i][j] ; //flowSurfaceLengthOn(i, j)*cos(flowSurfaceThetaOn(i, j));
+  					spatialY = spatialY + flowSurfaceLengthOf[i][j]*sin(flowSurfaceThetaOf[i][j]); //flowSurfaceVy[i][j] ; //flowSurfaceLengthOn(i, j)*sin(flowSurfaceThetaOn(i, j));
+
+  					thetaSpatial = thetaSpatial + flowSurfaceThetaOf[i][j];
+  					numNeighbors++;
+
+  					if(flowSurfaceLengthOf[i][j] > maxLength)
+  					{
+  						maxLength = flowSurfaceLengthOf[i][j];
+  						bestTheta = flowSurfaceThetaOf[i][j];
+  					}
+  				}
+  			}
+  		}
+
+  		if(numNeighbors > 0)
+  		{
+  			spatialPool.at(numWindows) = lengthSpatial/numNeighbors;
+  			spatialTheta.at(numWindows) = thetaSpatial/numNeighbors; //bestTheta; //
+  			spatialVectorX.at(numWindows) = spatialX/numNeighbors;
+  			spatialVectorY.at(numWindows) = spatialY/numNeighbors;
+  		}
+  		else
+  		{
+  			spatialPool.at(numWindows) = 0;
+  			spatialTheta.at(numWindows) = 0;
+  			spatialVectorX.at(numWindows) = 0;
+  			spatialVectorY.at(numWindows) = 0;
+  		}
+
+  		//std::cout << spatialPool(numWindows) << " " ;
+  		numWindows++;
+  	}
+
+  	double maxVal = 0;
+  	int maxValIndex = 0;
+
+
+
+  	for (int spt = 0; spt < numWindows; spt++)
+  	{
+  		if( spatialPool.at(spt) > maxVal)
+  		{
+  			maxVal = spatialPool.at(spt);
+  			maxValIndex = spt;
+  		}
+  	}
+
+  	//set flow to max rather than max(mean)
+  	//outFlow(0) = maxLength;
+  	//outFlow(1) = bestTheta;
+
+  	//use max of mean
+  	// /*
+  	if(maxVal > 0)
+  	{
+  		outFlow->setVx(spatialVectorX.at(maxValIndex));
+  		outFlow->setVy(spatialVectorY.at(maxValIndex));
+
+      //outFlow->setVx(maxLength);
+  		//outFlow->setVy(bestTheta);
+
+  		if(DEBUGMODE)
+  		{
+  			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << atan2(spatialVectorY.at(maxValIndex), spatialVectorX.at(maxValIndex)) << std::endl;
+  		}
+
+  	}
+  	else
+  	{
+  		outFlow->setVx(flowSurfaceLengthOf[x][y]);
+  		outFlow->setVy(flowSurfaceThetaOf[x][y]);
+
+  		if(DEBUGMODE)
+  		{
+  			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << flowSurfaceLengthOn[x][y] << " " << flowSurfaceThetaOn[x][y] << std::endl;
+  		}
+  	}
+
+  }
 	// */
 
 	//std::cout << maxVal << " " << maxValIndex << " " << std::endl;
@@ -893,186 +736,6 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
 
 }
 
-
-/******************************************************************************/
-FlowEvent vFlowManager::computeTrueFlow(int x, int y, int pol)
-{
-	FlowEvent *outFlow = new  FlowEvent(x, y, 0, pol, 0, 0);
-//	outFlow = Eigen::VectorXd(2);
-
-	Eigen::VectorXd spatialPool;
-	spatialPool = Eigen::VectorXd(width);
-
-	Eigen::VectorXd spatialTheta;
-	spatialTheta = Eigen::VectorXd(width);
-
-
-	if(pol == 1)
-	{
-		double maxLength = 0;
-		double bestTheta = 0;
-
-		double numWindows = 0;
-		for (int spatialSize = 0; spatialSize <= maxWindow; spatialSize+=windowJump)
-		{
-
-			double thetaSpatial = 0;
-			double lengthSpatial = 0;
-
-			double numNeighbors = 0;
-
-
-			for(int i = std::max(0, x-spatialSize); i <= std::min(x+spatialSize, width-1) ; i++)
-			{
-				for(int j = std::max(0, y-spatialSize); j <= std::min(y+spatialSize, width-1); j++)
-				{
-					if(flowSurfaceLengthOn[i][j] > 0)
-					{
-
-						lengthSpatial = lengthSpatial + flowSurfaceLengthOn[i][j];
-						thetaSpatial = thetaSpatial + flowSurfaceThetaOn[i][j];
-						numNeighbors++;
-
-						if(flowSurfaceLengthOn[i][j] > maxLength)
-						{
-							maxLength = flowSurfaceLengthOn[i][j];
-							bestTheta = flowSurfaceThetaOn[i][j];
-						}
-
-					}
-				}
-			}
-
-			if(numNeighbors > 0)
-			{
-				spatialPool(numWindows) = lengthSpatial/numNeighbors;
-				spatialTheta(numWindows) = thetaSpatial/numNeighbors; //bestTheta;
-			}
-			else
-			{
-				spatialPool(numWindows) = 0;
-				spatialTheta(numWindows) = 0;
-			}
-
-			//std::cout << spatialPool(numWindows) << " " ;
-			numWindows++;
-		 }
-
-		double maxVal = 0;
-		int maxValIndex = 0;
-
-		for (int spt = 0; spt < numWindows; spt++)
-		{
-			if( spatialPool(spt) > maxVal)
-			{
-				maxVal = spatialPool(spt);
-				maxValIndex = spt;
-			}
-		}
-
-		//set flow to max rather than max(mean)
-		//outFlow(0) = maxLength;
-		//outFlow(1) = bestTheta;
-
-		//use max of mean
-		// /*
-		if(maxVal > 0)
-		{
-			outFlow->setVx(maxVal);
-			outFlow->setVy(spatialTheta(maxValIndex));
-		}
-		else
-		{
-			outFlow->setVx(flowSurfaceLengthOn[x][y]);
-			outFlow->setVy(flowSurfaceThetaOn[x][y]);
-		}
-		// */
-
-		//std::cout << maxVal << " " << maxValIndex << " " << std::endl;
-	}
-	else
-	{
-		double numWindows = 0;
-
-		double maxLength = 0;
-		double bestTheta = 0;
-
-		for (int spatialSize = 0; spatialSize <= maxWindow; spatialSize+=windowJump)
-		{
-
-			double thetaSpatial = 0;
-			double lengthSpatial = 0;
-
-			double numNeighbors = 0;
-			for(int i = std::max(0, x-spatialSize); i <= std::min(x+spatialSize, width-1) ; i++)
-			{
-				for(int j = std::max(0, y-spatialSize); j <= std::min(y+spatialSize, width-1); j++)
-				{
-					if(flowSurfaceLengthOf[i][j] > 0)
-					{
-						lengthSpatial = lengthSpatial + flowSurfaceLengthOf[i][j];
-						thetaSpatial = thetaSpatial + flowSurfaceThetaOf[i][j];
-						numNeighbors++;
-
-						if(flowSurfaceLengthOf[i][j] > maxLength)
-						{
-							maxLength = flowSurfaceLengthOf[i][j];
-							bestTheta = flowSurfaceThetaOf[i][j];
-						}
-					}
-				}
-			}
-
-			if(numNeighbors > 0)
-			{
-				spatialPool(numWindows) = lengthSpatial/numNeighbors;
-				spatialTheta(numWindows) = thetaSpatial/numNeighbors; //bestTheta;
-			}
-			else
-			{
-				spatialPool(numWindows) = 0;
-				spatialTheta(numWindows) = 0;
-			}
-			numWindows++;
-		}
-
-
-		double maxVal = 0;
-		int maxValIndex = 0;
-
-		for (int spt = 0; spt < numWindows; spt++)
-		{
-			if( spatialPool(spt) > maxVal)
-			{
-				maxVal = spatialPool(spt);
-				maxValIndex = spt;
-			}
-		}
-
-		//set flow to max rather than max(mean)
-		//outFlow(0) = maxLength;
-		//outFlow(1) = bestTheta;
-
-		//use max of mean
-		// /*
-		if(maxVal > 0)
-		{
-			outFlow->setVx(maxVal);
-			outFlow->setVy(spatialTheta(maxValIndex));
-		}
-		else
-		{
-			outFlow->setVx(flowSurfaceLengthOf[x][y]);
-			outFlow->setVy(this->flowSurfaceThetaOf[x][y]);
-		}
-		// */
-		//std::cout << maxVal << " " << maxValIndex << " " << std::endl;
-	}
-
-
-	return *outFlow;
-
-}
 
 /******************************************************************************/
 int vFlowManager::computeGrads(std::vector<Event> subsurf,
@@ -1243,467 +906,3 @@ int vFlowManager::computeGrads(Eigen::MatrixXd A, Eigen::MatrixXd Y,
   return inliers;
 
 }
-
-
-/******************************************************************************/
-/*
-
-Vector vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, int pol)
-{
-
-	//std::cout << "in compute true flow time based" << std::endl;
-	double KILL_OLD_FLOW_TIME = 10000;
-
-	Vector outFlow;
-	outFlow = Vector(2);
-
-	Vector spatialPool;
-	spatialPool = Vector(width);
-
-	Vector spatialTheta;
-	spatialTheta = Vector(width);
-
-	//int windowJump = 1;
-	//int maxWindow = 8; // declared as global now
-
-	if(pol == 1)
-	{
-		//std::cout << "On event true copmpute" << std::endl;
-		double maxLength = 0;
-		double bestTheta = 0;
-
-		double numWindows = 0;
-		for (int spatialSize = 0; spatialSize <= maxWindow; spatialSize+=windowJump)
-		{
-
-			double thetaSpatial = 0;
-			double lengthSpatial = 0;
-
-			double numNeighbors = 0;
-
-
-			for(int i = std::max(0, x-spatialSize); i <= std::min(x+spatialSize, width-1) ; i++)
-			{
-				for(int j = std::max(0, y-spatialSize); j <= std::min(y+spatialSize, width-1); j++)
-				{
-					if(flowSurfaceLengthOn(i, j) > 0)
-					{
-						lengthSpatial = lengthSpatial + flowSurfaceLengthOn(i, j)*exp(-abs(double(timeEvent_-lastFlowTime(x,y)))/KILL_OLD_FLOW_TIME);
-						//std::cout << pol << " " << abs(double(timeEvent_-lastFlowTime(x,y))) << " " << exp(-abs(double(timeEvent_-lastFlowTime(x,y)))/KILL_OLD_FLOW_TIME) << std::endl;
-						thetaSpatial = thetaSpatial + flowSurfaceThetaOn(i,j);
-						numNeighbors++;
-
-						if(flowSurfaceLengthOn(i, j) > maxLength)
-						{
-							maxLength = flowSurfaceLengthOn(i, j);
-							bestTheta = flowSurfaceThetaOn(i, j);
-						}
-
-					}
-				}
-			}
-
-			if(numNeighbors > 0)
-			{
-				spatialPool(numWindows) = lengthSpatial/numNeighbors;
-				spatialTheta(numWindows) = thetaSpatial/numNeighbors; //bestTheta;
-			}
-			else
-			{
-				spatialPool(numWindows) = 0;
-				spatialTheta(numWindows) = 0;
-			}
-
-			//std::cout << spatialPool(numWindows) << " " ;
-			numWindows++;
-		 }
-
-		double maxVal = 0;
-		int maxValIndex = 0;
-
-		for (int spt = 0; spt < numWindows; spt++)
-		{
-			if( spatialPool(spt) > maxVal)
-			{
-				maxVal = spatialPool(spt);
-				maxValIndex = spt;
-			}
-		}
-
-		//set flow to max rather than max(mean)
-		//outFlow(0) = maxLength;
-		//outFlow(1) = bestTheta;
-
-		//use max of mean
-		// /*
-		if(maxVal > 0)
-		{
-			outFlow(0) = flowSurfaceLengthOn(x, y);
-			outFlow(1) = spatialTheta(maxValIndex);
-		}
-		else
-		{
-			outFlow(0) = flowSurfaceLengthOn(x, y);
-			outFlow(1) = flowSurfaceThetaOn(x, y);
-		}
-		// */
-
-		//std::cout << maxVal << " " << maxValIndex << " " << std::endl;
-/*	}
-	else
-	{
-		double numWindows = 0;
-
-		double maxLength = 0;
-		double bestTheta = 0;
-
-		for (int spatialSize = 0; spatialSize <= maxWindow; spatialSize+=windowJump)
-		{
-
-			double thetaSpatial = 0;
-			double lengthSpatial = 0;
-
-			double numNeighbors = 0;
-			for(int i = std::max(0, x-spatialSize); i <= std::min(x+spatialSize, width-1) ; i++)
-			{
-				for(int j = std::max(0, y-spatialSize); j <= std::min(y+spatialSize, width-1); j++)
-				{
-					if(flowSurfaceLengthOf(i, j) > 0)
-					{
-
-						lengthSpatial = lengthSpatial + flowSurfaceLengthOf(i, j)*exp(-abs(double(timeEvent_-lastFlowTime(x,y)))/KILL_OLD_FLOW_TIME);
-						//std::cout << pol << " " << exp(-abs(double(timeEvent_-lastFlowTime(x,y)))/KILL_OLD_FLOW_TIME) << std::endl;
-						thetaSpatial = thetaSpatial + flowSurfaceThetaOf(i,j);
-						numNeighbors++;
-
-						if(flowSurfaceLengthOf(i, j) > maxLength)
-						{
-							maxLength = flowSurfaceLengthOf(i, j);
-							bestTheta = flowSurfaceThetaOf(i, j);
-						}
-					}
-				}
-			}
-
-			if(numNeighbors > 0)
-			{
-				spatialPool(numWindows) = lengthSpatial/numNeighbors;
-				spatialTheta(numWindows) = thetaSpatial/numNeighbors; //bestTheta;
-			}
-			else
-			{
-				spatialPool(numWindows) = 0;
-				spatialTheta(numWindows) = 0;
-			}
-			numWindows++;
-		}
-
-
-		double maxVal = 0;
-		int maxValIndex = 0;
-
-		for (int spt = 0; spt < numWindows; spt++)
-		{
-			if( spatialPool(spt) > maxVal)
-			{
-				maxVal = spatialPool(spt);
-				maxValIndex = spt;
-			}
-		}
-
-		//set flow to max rather than max(mean)
-		//outFlow(0) = maxLength;
-		//outFlow(1) = bestTheta;
-
-		//use max of mean
-		// /*
-		if(maxVal > 0)
-		{
-			outFlow(0) = flowSurfaceLengthOf(x, y);
-			outFlow(1) = spatialTheta(maxValIndex);
-		}
-		else
-		{
-			outFlow(0) = flowSurfaceLengthOf(x, y);
-			outFlow(1) = flowSurfaceThetaOf(x, y);
-		}
-		// */
-		//std::cout << maxVal << " " << maxValIndex << " " << std::endl;
-
-		//std::cout << x << " " << y << " " << maxWindow << " " << numWindows << " " << outFlow(0) << " " << outFlow(1) << " " << flowSurfaceLengthOf(x, y) << " " << flowSurfaceThetaOf(x, y) << std::endl;
-/*	}
-
-
-
-	return outFlow;
-
-
-}
-// */
-
-/***********************************************************************/
-
-//*********************************************************************************
-
-/* // commented out old run() function
-
-bool vFlowManager::run()
-{
-
-	if(DEBUGMODE)
-	{
-		std::cout << "[debug] : Begin run" << std::endl;
-
-		std::cout << "[debug in Run] : Setting up initial values " << std::endl;
-	}
-
-	std::string outFileName = "";
-	outFileName = fileNameInput + "_FARMSOut.txt";
-
-	std::ofstream eventsFileOut;
-	eventsFileOut.open (outFileName.c_str());
-
-	double i = 0;
-	int x; int y; unsigned int time; int pol;
-
-	fileNameInput = fileNameInput + ".txt";
-	std::string line;
-
-	std::cout << fileNameInput << std::endl;
-
-	std::ifstream eventsFile (fileNameInput.c_str());
-
-	std::streampos fsize = eventsFile.tellg();
-	eventsFile.seekg( 0, std::ios::end );
-	fsize = eventsFile.tellg() - fsize;
-
-	eventsFile.seekg(0, std::ios::beg);
-
-	if(DEBUGMODE)
-	{
-		std::cout << "[debug in Run] : Done setting initial values " << std::endl;
-
-		std::cout << "[debug in Run] : Max window value " << maxWindow << std::endl;
-	}
-
-	Event *currentEvent = new Event(0, 0, 0, 0);
-	cSurf = EventMatrix<Event> (width, height, *currentEvent);
-
-	  if (eventsFile.is_open())
-	  {
-		getline (eventsFile,line);
-		std::stringstream stream(line);
-
-		stream >> x;
-		stream >> y;
-		stream >> time;
-		stream >> pol;
-
-		currentEvent->setX(x);
-		currentEvent->setY(y);
-		currentEvent->setStamp(time);
-		currentEvent->setPolarity(pol);
-
-		if(DEBUGMODE)
-		{
-			std::cout << "[debug in Run] : First event " << std::endl;
-		}
-		unsigned int t0 = time;
-
-		if(DEBUGMODE)
-		{
-			std::cout << "[debug in Run] : First event - initial event [x y p t]: [" << x << " " << y << " " << pol << " " << time << "]" << std::endl;
-		}
-		//std::cout << "[debug in Run] : Width Height [" << width << " " << height << "]" << std::endl;
-		//std::cout << "[debug in Run] : size of lastFlowTime is [sx sy]: [" << this->lastFlowTime.dim_a() << " " << lastFlowTime.dim_b() << "]" << std::endl;
-		this->lastFlowTime[x][y] = time;
-
-		if(DEBUGMODE)
-		{
-			std::cout << "[debug in Run] : While events loop - Set up lastFlowTime[x][y] " << std::endl;
-		}
-
-	    while (getline (eventsFile,line))
-	    {
-
-			std::stringstream stream(line);
-
-			stream >> x;
-			stream >> y;
-			stream >> time;
-			time = time - t0;
-
-			stream >> pol;
-			if(pol == -1)
-				pol = 0;
-			//pol = pol+1;
-
-			currentEvent->setX(x);
-			currentEvent->setY(y);
-			currentEvent->setStamp(time);
-			currentEvent->setPolarity(pol);
-
-			if(DEBUGMODE)
-			{
-				std::cout << "[debug in Run] : Set current event " << std::endl;
-			}
-
-			lastEvent = *currentEvent;
-
-			//cSurf.setMostRecent(*currentEvent);
-
-			if(pol == 1)
-			{
-				//cSurf.clear();
-				//cSurf.resize(width, height, 0);
-				cSurf = surfaceOnL;
-			}
-			else
-			{
-				//cSurf.resize(width, height, currentEvent);
-			    cSurf = surfaceOfL;
-			}
-
-
-			//if(pol == 1)
-			//	std::cout << x << " " << y << " " << time << " " << pol << std::endl;
-
-			i++;
-//			}
-
-			//cSurf.setMostRecent(currentEvent);
-			//std::cout << "Computing flow" << std::endl;
-
-			//if(pol == 0)
-			FlowEvent ofe = compute();
-
-		    if(!std::isnan(ofe.getVx()) && !std::isnan(ofe.getVy()) && ofe.getVx() == 0 && ofe.getVy() == 0)
-			{
-
-				//std::cout << pol << std::endl;
-				//std::cout << "Got flow" << " ";
-				//std::cout << "vFlow event occurd " << ofe[0] << std::endl;
-				//std::cout << "Percentage complete: " << int((i*100*18.37)/(fsize)) << "%" << " "  << '\r';
-				// basic file operations
-
-
-
-				double length = sqrt( (ofe.getVx()*ofe.getVy() + ofe.getVx()*ofe.getVy()));
-				double theta = atan2(ofe.getVy(), ofe.getVx());
-
-				//std::cout << x << " " << y << " " << pol << " " << length << " " << theta << std::endl;
-
-
-				 if(pol == 1)
-				{
-					//cSurf = surfaceOnL;
-					flowSurfaceLengthOn[x][y] = length;
-					flowSurfaceThetaOn[x][y] = theta;
-
-					flowSurfaceVx[x][y] = ofe.getVx();
-					flowSurfaceVy[x][y] = ofe.getVy();
-
-
-					//double theta_0_2pi = theta - floor(theta/(2*M_PI))*theta;
-					//flowSurfaceThetaOn(x, y) = theta_0_2pi;
-
-				}
-				else
-				{
-					//cSurf = surfaceOfL;
-					flowSurfaceLengthOn[x][y] = length;
-					flowSurfaceThetaOn[x][y] = theta;
-
-					flowSurfaceLengthOf[x][y] = length;
-					flowSurfaceThetaOf[x][y] = theta;
-
-					flowSurfaceVx[x][y] = ofe.getVy();
-					flowSurfaceVy[x][y] = ofe.getVx();
-				}
-
-
-				FlowEvent trueFlow = computeTrueFlow(x, y, time, pol);
-
-
-				if(pol == 1)
-					eventsFileOut << x << " " << y << " " << time << " " << 1 << " " << length << " " << trueFlow.getY() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
-				else
-					eventsFileOut << x << " " << y << " " << time << " " << -1 << " " << length << " " << trueFlow.getY() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
-
-
-				// /*
-				if(pol == 1)
-				{
-					flowSurfaceLengthOn[x][y] = trueFlow.getX();
-					flowSurfaceThetaOn[x][y] = trueFlow.getY();
-				}
-				else
-				{
-
-					flowSurfaceLengthOf[x][y] = trueFlow.getX();
-					flowSurfaceThetaOf[x][y] = trueFlow.getY();
-
-					flowSurfaceLengthOn[x][y] = trueFlow.getX();
-					flowSurfaceThetaOn[x][y] = trueFlow.getY();
-				}
-
-				std::cout << "Percentage complete: " << double((i*100*18.7)/(fsize)) << "%" << " "  << '\r';
-			}
-			else{
-
-				if(pol ==1)
-					eventsFileOut << x << " " << y << " " << time << " " << 1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
-				else
-					eventsFileOut << x << " " << y << " " << time << " " << -1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
-
-
-
-
-				if(pol == 1)
-				{
-					flowSurfaceLengthOn[x][y] = 0;
-					flowSurfaceThetaOn[x][y] = 0;
-				}
-				else
-				{
-					flowSurfaceLengthOf[x][y] = 0;
-					flowSurfaceThetaOf[x][y] = 0;
-
-					flowSurfaceLengthOn[x][y] = 0;
-					flowSurfaceThetaOn[x][y] = 0;
-				}
-
-			}
-
-//			std::cout << aep->getPolarity() << std::endl;
-
-			lastFlowTime[x][y] = time;
-
-	    }
-	    eventsFile.close();
-	  }
-	 else std::cout << "Unable to open file" << std::endl;
-
-	 eventsFileOut.close();
-	 std::cout << std::endl << "Done!" << std::endl;
-	 exit(0);
-
-
-    //std::string inPortName = "/" + moduleName + "/vBottl:i";
-    //bool check1 = BufferedPort<emorph::vBottle>::open(inPortName);
-
-    //if(strictness) outPort.setStrict();
-    //std::string outPortName = "/" + moduleName + "/vBottle:o";
-    //bool check2 = outPort.open(outPortName);
-
-//    Eigen::MatrixXd q = new Eigen::MatrixXd()
-//    vf = new Eigen::VectorXd();
- //       vf->setVx(dtdx);
- //      vf->setVy(dtdy);
- //       vf->setDeath();
-
-    return true; //check1 && check2;
-
-
-}
-// */

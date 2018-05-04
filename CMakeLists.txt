@@ -16,13 +16,14 @@ source_group("Source Files" FILES ${source})
 source_group("Header Files" FILES ${header})
 
 find_package (Eigen3 REQUIRED)
+find_package (Boost REQUIRED COMPONENTS program_options)
 
-include_directories(${EIGEN3_INCLUDE_DIRS})
+include_directories(${EIGEN3_INCLUDE_DIRS} ${BOOST_INCLUDE_DIRS})
 
 message(STATUS "print")
 
 add_executable(${PROJECTNAME} ${source} ${header})
 
-target_link_libraries (${PROJECTNAME} ${EIGEN3_LIBRARIES})
+target_link_libraries (${PROJECTNAME} ${EIGEN3_LIBRARIES} ${Boost_PROGRAM_OPTIONS_LIBRARY} ${BOOST_LIBRARIES})
 
 install(TARGETS ${PROJECTNAME} DESTINATION bin)
