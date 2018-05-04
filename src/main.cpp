@@ -35,13 +35,14 @@ int main(int argc, char * argv[])
 
     int NUMEVENTS = 1000000;
 
-    std::string fileNameInput = "/home/himanshu/POST_DOC/DATA/atisData/bar_square/multiPattern1_fixed_";
+    std::string fileNameInput = "/home/himanshu/POST_DOC/DATA/atisData/shapes_004_fixed_cleaned_cross_";
 
     vFlowManager vFlowM(height, width, filterSize,
                                      minEvtsOnPlane,  fileNameInput);
 
     std::cout << "[debug Main] : size of lastFlowTime is [sx sy]: [" << vFlowM.returnFlowTime().dim_a() << " " << vFlowM.returnFlowTime().dim_b() << "]" << std::endl;
-    vFlowM.run(NUMEVENTS);
+    //vFlowM.run(NUMEVENTS);
+    vFlowM.run();
 
     return 0;
 }
