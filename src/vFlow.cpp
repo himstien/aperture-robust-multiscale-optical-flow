@@ -134,7 +134,7 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 	eventsFile.seekg( 0, std::ios::end );
 	fsize = eventsFile.tellg() - fsize;
 
-  
+
   NUMEVENTS = (unsigned long int) (std::min(double(NUMEVENTS), double(fsize/18)));
 
 	eventsFile.seekg(0, std::ios::beg);
@@ -216,6 +216,7 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 			if(pol == 1)
 			{
 				surfaceOnL[x][y] = *currentEvent;
+        surfaceOfL[x][y] = *currentEvent;
 				//cSurf.clear();
 				//cSurf.resize(width, height, 0);
 				cSurf = surfaceOnL;
@@ -223,6 +224,7 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 			else
 			{
 				surfaceOfL[x][y] = *currentEvent;
+        surfaceOnL[x][y] = *currentEvent;
 				//cSurf.resize(width, height, currentEvent);
 		    cSurf = surfaceOfL;
 			}
@@ -259,6 +261,9 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 					flowSurfaceVx[x][y] = ofe.getVx();
 					flowSurfaceVy[x][y] = ofe.getVy();
 
+          flowSurfaceLengthOf[x][y] = length;
+					flowSurfaceThetaOf[x][y] = theta;
+
 					//double theta_0_2pi = theta - floor(theta/(2*M_PI))*theta;
 					//flowSurfaceThetaOn(x, y) = theta_0_2pi;
 
@@ -266,8 +271,8 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 				else // OFF EVENTS
 				{
 					//cSurf = surfaceOfL;
-					//flowSurfaceLengthOn[x][y] = length;
-					//flowSurfaceThetaOn[x][y] = theta;
+					flowSurfaceLengthOn[x][y] = length;
+					flowSurfaceThetaOn[x][y] = theta;
 
 					flowSurfaceLengthOf[x][y] = length;
 					flowSurfaceThetaOf[x][y] = theta;
@@ -288,12 +293,13 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 					eventsFileOut << x << " " << y << " " << time_ << " " << 1 << " " << length << " " << trueAngle << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
 					//std::cout << "{DEBUG}: Writing to file " << x << " " << y << " " << time_ << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
 				}
-				else{
+				else
+        {
 					eventsFileOut << x << " " << y << " " << time_ << " " << -1 << " " << length << " " << trueAngle << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
 					//std::cout << "{DEBUG}: Writing to file " << x << " " << y << " " << time_ << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
 				}
 
-				// /*
+				 /*
 				if(pol == 1)
 				{
 					flowSurfaceLengthOn[x][y] = trueLength;
@@ -304,9 +310,6 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 
 					flowSurfaceLengthOf[x][y] = trueLength;
 					flowSurfaceThetaOf[x][y] = trueAngle;
-
-//					flowSurfaceLengthOn[x][y] = trueFlow.getVx();
-//					flowSurfaceThetaOn[x][y] = trueFlow.getVy();
 				}
 				// */
 			}
@@ -318,7 +321,7 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 					eventsFileOut << x << " " << y << " " << time_ << " " << -1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
 
 
-				// /*
+				 /*
 				if(pol == 1)
 				{
 					flowSurfaceLengthOn[x][y] = 0;
@@ -639,7 +642,7 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
   		{
   			for(int j = std::max(0, y-spatialSize); j <= std::min(y+spatialSize, width-1); j++)
   			{
-  				if(flowSurfaceLengthOn[i][j] > 0 && (abs(timeEvent_-lastEventTime[i][j]) < KILL_OLD_FLOW_TIME))
+  				if(flowSurfaceLengthOf[i][j] > 0 && (abs(timeEvent_-lastEventTime[i][j]) < KILL_OLD_FLOW_TIME))
           //std::cout << "[Debug (computeTrueFlow) ] timeDiff: " << abs(timeEvent_-lastEventTime[i][j]) << std::endl;
   				{
   					lengthSpatial = lengthSpatial + flowSurfaceLengthOf[i][j];
@@ -681,8 +684,6 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
   	double maxVal = 0;
   	int maxValIndex = 0;
 
-
-
   	for (int spt = 0; spt < numWindows; spt++)
   	{
   		if( spatialPool.at(spt) > maxVal)
@@ -698,7 +699,7 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
 
   	//use max of mean
   	// /*
-  	if(maxVal > 0)
+  	if(maxVal > 0) // if there was flow activity in a spatial scale
   	{
   		outFlow->setVx(spatialVectorX.at(maxValIndex));
   		outFlow->setVy(spatialVectorY.at(maxValIndex));
@@ -712,10 +713,10 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
   		}
 
   	}
-  	else
+  	else  // if now assign the same as original flow
   	{
-  		outFlow->setVx(flowSurfaceLengthOf[x][y]);
-  		outFlow->setVy(flowSurfaceThetaOf[x][y]);
+  		outFlow->setVx(flowSurfaceLengthOf[x][y]*cos(flowSurfaceThetaOf[x][y]));
+  		outFlow->setVy(flowSurfaceLengthOf[x][y]*sin(flowSurfaceThetaOf[x][y]));
 
   		if(DEBUGMODE)
   		{
