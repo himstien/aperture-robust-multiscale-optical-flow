@@ -38,7 +38,7 @@ Type ./FARMS_Flow --help for parameters list ..
 
 
 e.g:
-./FARMS_Flow --width 320 --height 320 --filename ~/POST_DOC/DATA/atisData/shapes_004_fixed_cleaned_cross_
+./FARMS_Flow --width 320 --height 320 --filename ~/path/to/file/filename *note: filename is without extension
 
 ********************************************************************************************************************************
 Parameter list:
