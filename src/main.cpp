@@ -22,6 +22,7 @@
 #include "../include/vFlow.h"
 #include <boost/program_options.hpp>
 #include <exception>
+#include <chrono>
 
 namespace options = boost::program_options;
 
@@ -33,6 +34,7 @@ int main(int argc, char * argv[])
   int width = 320;
   int filterSize = 3;
   int minEvtsOnPlane = 5;
+  bool verboseMode = false;
 
 
   unsigned long int NUMEVENTS = pow(2, 63);
@@ -49,7 +51,8 @@ int main(int argc, char * argv[])
           ("width", options::value<int>(), "set sensor width")
           ("filtersize", options::value<int>(), "set size of neighbor for plane fitting")
           ("inlierCheck", options::value<int>(), "set minimum number of inliers to validate plane")
-          ("numEvents", options::value<int>(), "set max number of events to process");
+          ("numEvents", options::value<int>(), "set max number of events to process")
+          ("v", options::value<int>(), "set verbose to 1 for full debug mode");
 
 
     options::variables_map vm;
@@ -61,7 +64,17 @@ int main(int argc, char * argv[])
         std::cout << desc << "\n";
         return 0;
     }
-
+	
+// set verbose	
+	if (vm.count("v"))
+    {
+		std::cout << "Verbose mode set to " << vm["v"].as<int>() << std::endl;	
+        if(vm["v"].as<int>() == 1)
+        {
+			verboseMode = true;
+		}        
+    }
+    
 //set filename
     if (vm.count("filename"))
     {
@@ -144,14 +157,45 @@ int main(int argc, char * argv[])
   {
       std::cerr << "Exception of unknown type!\n";
   }
-
-
+	
 
     vFlowManager vFlowM(height, width, filterSize,
                                      minEvtsOnPlane,  fileNameInput);
 
     std::cout << "[debug Main] : size of lastFlowTime is [sx sy]: [" << vFlowM.returnFlowTime().dim_a() << " " << vFlowM.returnFlowTime().dim_b() << "]" << std::endl;
-    vFlowM.run(NUMEVENTS);
+    
+    vFlowM.setDebugMode(verboseMode);
+    
+    //std::cout << "[debug Main] : total num events : " << NUMEVENTS << std::endl;
+    
+    // get the current time
+    const auto startComputation     = std::chrono::system_clock::now();
 
+    // transform the time into a duration since the epoch
+    const auto startComputationEpoch   = startComputation.time_since_epoch();
+
+    // cast the duration into seconds
+    const auto startComputationSeconds = std::chrono::duration_cast<std::chrono::seconds>(startComputationEpoch);
+    
+    std::cout << "[Benchmark Main] : Starting computation at  : " << startComputationSeconds.count() << " seconds." << std::endl;
+    
+    vFlowM.run(NUMEVENTS);
+    
+    	// get the current time
+    const auto endComputation     = std::chrono::system_clock::now();
+
+    // transform the time into a duration since the epoch
+    const auto endComputationEpoch   = endComputation.time_since_epoch();
+
+    // cast the duration into seconds
+    const auto endComputationSeconds = std::chrono::duration_cast<std::chrono::seconds>(endComputationEpoch);
+
+	std::cout << "[Benchmark Main] : Ending computation at  : " <<  (endComputationSeconds.count()) << " seconds." << std::endl;
+	
+	
+	std::cout << "[Benchmark Main] : Total time for computation   : " <<  endComputationSeconds.count() - startComputationSeconds.count() << " seconds." << std::endl;
+	
+	std::cout << "[Benchmark Main] : Total events computed   : " <<  vFlowM.getNumEvents()  << std::endl;
+	
     return 0;
 }

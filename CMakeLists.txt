@@ -15,8 +15,9 @@ file(GLOB header "include/*.h")
 source_group("Source Files" FILES ${source})
 source_group("Header Files" FILES ${header})
 
+
 find_package (Eigen3 REQUIRED)
-find_package (Boost REQUIRED COMPONENTS program_options)
+find_package (Boost REQUIRED COMPONENTS program_options chrono)
 
 include_directories(${EIGEN3_INCLUDE_DIRS} ${BOOST_INCLUDE_DIRS})
 

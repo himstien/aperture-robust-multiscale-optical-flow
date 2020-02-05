@@ -67,7 +67,7 @@ vFlowManager::vFlowManager(int height, int width, int filterSize,
 
 
 	windowJump = width/40; // 10
-	maxWindow = width/2; //100
+	maxWindow = width/8; //100
 
   eventsComputed = 0;
   eventsPotential = 0;
@@ -91,7 +91,8 @@ vFlowManager::vFlowManager(int height, int width, int filterSize,
 
     //this->run();
 
-
+	DEBUGMODE = true;
+	
 	if(DEBUGMODE)
 	{
  		std::cout << "[debug in Run] : size of lastEventTime is [sx sy]: [" << lastEventTime.dim_a() << " " << lastEventTime.dim_b() << "]" << std::endl;
@@ -129,13 +130,13 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 
 	std::ifstream eventsFile (fileNameInput.c_str());
 
-  eventsFile.seekg(0, std::ios::beg);
+  	eventsFile.seekg(0, std::ios::beg);
 	std::streampos fsize = eventsFile.tellg();
 	eventsFile.seekg( 0, std::ios::end );
 	fsize = eventsFile.tellg() - fsize;
 
 
-  NUMEVENTS = (unsigned long int) (std::min(double(NUMEVENTS), double(fsize/18)));
+  	NUMEVENTS = (unsigned long int) (std::min(double(NUMEVENTS), double(fsize/18)));
 
 	eventsFile.seekg(0, std::ios::beg);
 
@@ -171,6 +172,8 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 			std::cout << "[debug in Run] : First event " << std::endl;
 		}
 		unsigned int t0 = time_;
+
+		std::cout << "First time = " << t0 << std::endl;
 
 		if(DEBUGMODE)
 		{
@@ -338,7 +341,8 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 //			std::cout << aep->getPolarity() << std::endl;
 
 			lastEventTime[x][y] = time_;
-      eventsComputed++;
+			eventsComputed++;
+			this->numEvents = eventsComputed;
 			std::cout << "Percentage complete: " << double((100*eventsComputed)/(NUMEVENTS)) << "%" << " "  << '\r';
 	    }
 	    eventsFile.close();

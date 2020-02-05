@@ -23,15 +23,17 @@ class vFlowManager
 {
 private:
 
-  bool DEBUGMODE  = false;
+	bool DEBUGMODE  = false;
 	const double MAXSTAMP = pow(2, 32);
 	const double TSTOSEC = 1e-6;
 
 	int windowJump = 5;
 	int maxWindow = 20;
 
+	double numEvents = 0;
+	
 	FlowEvent trueFlow;
-  Event lastEvent;
+	Event lastEvent;
 
   std::string fileNameInput;
   int height = 320; //! sensor height
@@ -100,6 +102,8 @@ public:
     void close(); // close the program and clear memory. *not defined yet*
 
 	EventMatrix<double> returnFlowTime(){return lastEventTime; }; //[DEBUG] test function to check if arrays are initialized correctly.
+	double getNumEvents(){return numEvents; };
+	void setDebugMode(bool in) {DEBUGMODE = in;};
 
 };
 
