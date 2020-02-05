@@ -195,7 +195,7 @@ int main(int argc, char * argv[])
 	
 	std::cout << "[Benchmark Main] : Total time for computation   : " <<  endComputationSeconds.count() - startComputationSeconds.count() << " seconds." << std::endl;
 	
-	std::cout << "[Benchmark Main] : Total events computed   : " <<  vFlowM.getNumEvents()  << std::endl;
+	std::cout << "[Benchmark Main] : Total events computed   : " <<  vFlowM.getNumEvents()-1  << " with rate of : " << (vFlowM.getNumEvents()-1)/(endComputationSeconds.count() - startComputationSeconds.count()) << " events/sec" << std::endl;
 	
     return 0;
 }

@@ -340,8 +340,8 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 
 //			std::cout << aep->getPolarity() << std::endl;
 
-			lastEventTime[x][y] = time_;
-			eventsComputed++;
+			lastEventTime[x][y] = time_;			
+			eventsComputed++;			
 			this->numEvents = eventsComputed;
 			std::cout << "Percentage complete: " << double((100*eventsComputed)/(NUMEVENTS)) << "%" << " "  << '\r';
 	    }
@@ -351,7 +351,7 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 
 	 eventsFileOut.close();
 	 std::cout << std::endl << "Done!" << std::endl;
-	 exit(0);
+	 //exit(0);
 
 
     //std::string inPortName = "/" + moduleName + "/vBottl:i";
