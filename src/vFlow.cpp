@@ -66,8 +66,8 @@ vFlowManager::vFlowManager(int height, int width, int filterSize,
 	lastEventTime.resize(width, height, 0.0);
 
 
-	windowJump = width/40; // 10
-	maxWindow = width/8; //100
+	windowJump = 10; //width/40; // 10
+	maxWindow = 100; //width/2; //100
 
   eventsComputed = 0;
   eventsPotential = 0;
@@ -115,7 +115,7 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 	}
 
 	std::string outFileName = "";
-	outFileName = fileNameInput + "_FARMSOut.txt";
+	outFileName = fileNameInput + "_FARMSOut_bench.txt";
 
 	std::ofstream eventsFileOut;
 	eventsFileOut.open (outFileName.c_str());
@@ -264,7 +264,7 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 					flowSurfaceVx[x][y] = ofe.getVx();
 					flowSurfaceVy[x][y] = ofe.getVy();
 
-          flowSurfaceLengthOf[x][y] = length;
+					flowSurfaceLengthOf[x][y] = length;
 					flowSurfaceThetaOf[x][y] = theta;
 
 					//double theta_0_2pi = theta - floor(theta/(2*M_PI))*theta;
@@ -343,7 +343,7 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 			lastEventTime[x][y] = time_;			
 			eventsComputed++;			
 			this->numEvents = eventsComputed;
-			std::cout << "Percentage complete: " << double((100*eventsComputed)/(NUMEVENTS)) << "%" << " "  << '\r';
+			//std::cout << "Percentage complete: " << double((100*eventsComputed)/(NUMEVENTS)) << "%" << " "  << '\r';
 	    }
 	    eventsFile.close();
 	  }
