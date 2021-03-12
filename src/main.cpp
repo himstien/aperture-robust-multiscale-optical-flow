@@ -40,7 +40,8 @@ int main(int argc, char * argv[])
   unsigned long int NUMEVENTS = pow(2, 63);
 
   std::string fileNameInput = "/home/himanshu/POST_DOC/DATA/atisData/bar_square/multiPattern1_fixed_";
-
+  bool Serial_ = true;
+  	
   try
   {
     options::options_description desc("Allowed options");
@@ -52,6 +53,9 @@ int main(int argc, char * argv[])
           ("filtersize", options::value<int>(), "set size of neighbor for plane fitting")
           ("inlierCheck", options::value<int>(), "set minimum number of inliers to validate plane")
           ("numEvents", options::value<int>(), "set max number of events to process")
+          ("numevents", options::value<int>(), "set max number of events to process")
+          ("NUMEVENTS", options::value<int>(), "set max number of events to process")
+          ("SERIAL", options::value<int>(), "Serial or Batch processing")
           ("v", options::value<int>(), "set verbose to 1 for full debug mode");
 
 
@@ -143,9 +147,41 @@ int main(int argc, char * argv[])
         NUMEVENTS = vm["numEvents"].as<int>();
 
     }
+    else if (vm.count("numevents"))
+    {
+        std::cout << "numEvents set to "
+             << vm["numevents"].as<int>() << ".\n";
+        NUMEVENTS = vm["numevents"].as<int>();
+
+    }
+    else if (vm.count("NUMEVENTS"))
+    {
+        std::cout << "numEvents set to "
+             << vm["NUMEVENTS"].as<int>() << ".\n";
+        NUMEVENTS = vm["NUMEVENTS"].as<int>();
+
+    }
     else
     {
     }
+
+
+// set serial or batch
+	if (vm.count("SERIAL"))
+    {
+		if(vm["SERIAL"].as<int>() == 1)
+        {
+			std::cout << "Running serially "  << std::endl;	
+			Serial_ = true;
+		}        
+		else
+		{
+			Serial_ = false;
+			std::cout << "Running batch "  << std::endl;	
+		}
+    }
+
+
 
   }
   catch(std::exception& e)
@@ -159,43 +195,35 @@ int main(int argc, char * argv[])
   }
 	
 
-    vFlowManager vFlowM(height, width, filterSize,
+		    vFlowManager vFlowM(height, width, filterSize,
                                      minEvtsOnPlane,  fileNameInput);
 
     std::cout << "[debug Main] : size of lastFlowTime is [sx sy]: [" << vFlowM.returnFlowTime().dim_a() << " " << vFlowM.returnFlowTime().dim_b() << "]" << std::endl;
     
     vFlowM.setDebugMode(verboseMode);
-    
-    //std::cout << "[debug Main] : total num events : " << NUMEVENTS << std::endl;
-    
-    // get the current time
-    const auto startComputation     = std::chrono::system_clock::now();
 
-    // transform the time into a duration since the epoch
-    const auto startComputationEpoch   = startComputation.time_since_epoch();
-
-    // cast the duration into seconds
-    const auto startComputationSeconds = std::chrono::duration_cast<std::chrono::seconds>(startComputationEpoch);
     
-    std::cout << "[Benchmark Main] : Starting computation at  : " << startComputationSeconds.count() << " seconds." << std::endl;
+    //std::cout << "[debug Main] : total num events : " << NUMEVENTS << std::endl; 
+
+	if(Serial_)
+	{
+
+		long durationActualProcessing = vFlowM.run(NUMEVENTS);			
+		float durationActualProcessingSec = durationActualProcessing/1000000;
+		std::cout << "[Benchmark Main] : Processing time   : " << durationActualProcessing << " usec " <<  durationActualProcessingSec << " sec " << " with rate of : " << (vFlowM.getNumEvents()-1)/durationActualProcessingSec << " events/sec" << std::endl;
     
-    vFlowM.run(NUMEVENTS);
+	}        
+	else
+	{
+
+		long durationActualProcessing = vFlowM.runFileCopy(NUMEVENTS);
+float durationActualProcessingSec = durationActualProcessing/1000000;
+	std::cout << "[Benchmark Main] : Processing time   : " << durationActualProcessing << " usec " <<  durationActualProcessingSec << " sec " << " with rate of : " << (vFlowM.getNumEvents()-1)/durationActualProcessingSec << " events/sec" << std::endl;
     
-    	// get the current time
-    const auto endComputation     = std::chrono::system_clock::now();
-
-    // transform the time into a duration since the epoch
-    const auto endComputationEpoch   = endComputation.time_since_epoch();
-
-    // cast the duration into seconds
-    const auto endComputationSeconds = std::chrono::duration_cast<std::chrono::seconds>(endComputationEpoch);
-
-	std::cout << "[Benchmark Main] : Ending computation at  : " <<  (endComputationSeconds.count()) << " seconds." << std::endl;
+	}        
+    
 	
 	
-	std::cout << "[Benchmark Main] : Total time for computation   : " <<  endComputationSeconds.count() - startComputationSeconds.count() << " seconds." << std::endl;
-	
-	std::cout << "[Benchmark Main] : Total events computed   : " <<  vFlowM.getNumEvents()-1  << " with rate of : " << (vFlowM.getNumEvents()-1)/(endComputationSeconds.count() - startComputationSeconds.count()) << " events/sec" << std::endl;
 	
     return 0;
 }

@@ -21,6 +21,7 @@ int pol;
 double t;
 double Vx;
 double Vy;
+int scale;
 
 public:
 
@@ -41,7 +42,7 @@ public:
     bool setPolarity(int);
     bool setVx(double);
     bool setVy(double);
-    
+    bool setScale(int);
     
     int getX();
     int getY();
@@ -49,6 +50,7 @@ public:
     double getVy();
     double getStamp();
     int getPolarity();
+    int getScale();
 
 };
 

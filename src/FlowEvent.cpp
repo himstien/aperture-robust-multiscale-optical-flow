@@ -14,6 +14,7 @@ this->pol = pol;
 this->t = t;
 this->Vx = Vx;
 this->Vy = Vy;
+this->scale = 0;
 
 };
 
@@ -26,6 +27,7 @@ this->pol = 0;
 this->t = 0;
 this->Vx = 0;
 this->Vy = 0;
+this->scale = 0;
 
 };
 
@@ -67,6 +69,11 @@ bool FlowEvent::setVy(double value){
  return true;	
 }
 
+bool FlowEvent::setScale(int value){
+
+ this->scale = value;
+ return true;	
+}
       
 FlowEvent FlowEvent::operator=(const FlowEvent& copy) {
 
@@ -77,7 +84,7 @@ tmp.setStamp(copy.t);
 tmp.setPolarity(copy.pol);
 tmp.setVx(copy.Vx);
 tmp.setVy(copy.Vy);
-
+tmp.setScale(copy.scale);
 return tmp;
 
 }
@@ -89,5 +96,5 @@ double FlowEvent::getVx(){ return Vx;};
 double FlowEvent::getVy(){ return Vy;};
 double FlowEvent::getStamp(){ return t;};
 int FlowEvent::getPolarity(){ return pol;};
-
+int FlowEvent::getScale(){ return scale;};
 

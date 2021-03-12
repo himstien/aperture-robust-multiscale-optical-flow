@@ -77,6 +77,7 @@ private:
   Eigen::MatrixXd AtA;
   Eigen::MatrixXd A2;
   std::vector< double > abc;
+  
 
 
   int eventsComputed;
@@ -98,12 +99,20 @@ public:
     vFlowManager(int height, int width, int filterSize, int minEvtsOnPlane);
     vFlowManager(int height, int width, int filterSize, int minEvtsOnPlane, std::string fileName);
 
-    bool run(unsigned long int); // run over given number of events only
+//    bool run(unsigned long int); // run over given number of events only
+    long run(unsigned long int); // run over given number of events only
+    long runFileCopy(unsigned long int); // run over given number of events only
     void close(); // close the program and clear memory. *not defined yet*
 
 	EventMatrix<double> returnFlowTime(){return lastEventTime; }; //[DEBUG] test function to check if arrays are initialized correctly.
 	double getNumEvents(){return numEvents; };
 	void setDebugMode(bool in) {DEBUGMODE = in;};
+	
+	std::vector< int > X;
+	std::vector< int > Y;
+	std::vector< unsigned int > T;
+	std::vector< int > POL;
+
 
 };
 

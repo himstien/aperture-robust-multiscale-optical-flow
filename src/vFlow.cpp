@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <Eigen/LU>
+#include <chrono>
 
 #define DEBUG
 /******************************************************************************/
@@ -66,12 +67,15 @@ vFlowManager::vFlowManager(int height, int width, int filterSize,
 	lastEventTime.resize(width, height, 0.0);
 
 
-	windowJump = 10; //width/40; // 10
-	maxWindow = 100; //width/2; //100
+	//windowJump = 10; //width/40; // 10
+	//maxWindow = 100; //width/2; //100
 
-  eventsComputed = 0;
-  eventsPotential = 0;
-  bottleCount = 0;
+	windowJump = 5; //width/40; // 10
+	maxWindow = 50; //width/2; //100
+	
+	eventsComputed = 0;
+	eventsPotential = 0;
+	bottleCount = 0;
 
 	Event *tmp = new Event(0, 0, 0, 0);
     //create our surface in synchronous mode
@@ -91,42 +95,63 @@ vFlowManager::vFlowManager(int height, int width, int filterSize,
 
     //this->run();
 
-	DEBUGMODE = true;
+	DEBUGMODE = false;
 	
-	if(DEBUGMODE)
-	{
- 		std::cout << "[debug in Run] : size of lastEventTime is [sx sy]: [" << lastEventTime.dim_a() << " " << lastEventTime.dim_b() << "]" << std::endl;
-    	std::cout << "[debug] : End creating vFlowManager object" << std::endl;
-	}
+//	if(DEBUGMODE)
+//	{
+ //		std::cout << "[debug in Run] : size of lastEventTime is [sx sy]: [" << lastEventTime.dim_a() << " " << lastEventTime.dim_b() << "]" << std::endl;
+   // 	std::cout << "[debug] : End creating vFlowManager object" << std::endl;
+	//}
 
 
 
 }
 
 /******************************************************************************/
-bool vFlowManager::run(unsigned long int NUMEVENTS)
+long vFlowManager::runFileCopy(unsigned long int NUMEVENTS)
 {
 
-	if(DEBUGMODE)
-	{
-		std::cout << "[debug] : Begin run" << std::endl;
+	long durationEvents = 0;
+	long durationEventsTrueShow = 0;
+	long durationEventsLocalShow = 0;
 
-		std::cout << "[debug in Run] : Setting up initial values " << std::endl;
-	}
+	FlowEvent *vf;
+	vf =  new FlowEvent(0, 0, 0, 0, 0, 0);
+
+	FlowEvent trueFlow = *vf;
+
+	//if(DEBUGMODE)
+	//{
+//		std::cout << "[debug] : Begin run" << std::endl;
+
+//		std::cout << "[debug in Run] : Setting up initial values " << std::endl;
+//	}
 
 	std::string outFileName = "";
-	outFileName = fileNameInput + "_FARMSOut_bench.txt";
+	outFileName = fileNameInput + "_FARMSOut_batch.txt";
 
-	std::ofstream eventsFileOut;
-	eventsFileOut.open (outFileName.c_str());
+	
+	std::vector<int> X_out;
+	std::vector<int> Y_out;
+	std::vector<int> T_out;
+	std::vector<int> P_out;
+	std::vector<double> RLocal_out;
+	std::vector<double> ThetaLocal_out;
+	std::vector<double> RTrue_out;
+	std::vector<double> ThetaTrue_out;
+	std::vector<double> Vx_out;
+	std::vector<double> Vy_out;
+	std::vector<int> SpatialWindow;
 
 	double i = 0;
 	int x; int y; unsigned int time_; int pol;
+	unsigned int previous_time_ = 0;
 
 	fileNameInput = fileNameInput + ".txt";
 	std::string line;
 
 	std::cout << fileNameInput << std::endl;
+	
 
 	std::ifstream eventsFile (fileNameInput.c_str());
 
@@ -136,109 +161,156 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 	fsize = eventsFile.tellg() - fsize;
 
 
-  	NUMEVENTS = (unsigned long int) (std::min(double(NUMEVENTS), double(fsize/18)));
+//  	NUMEVENTS = (unsigned long int) (std::min(double(NUMEVENTS), double(fsize/18)));
 
 	eventsFile.seekg(0, std::ios::beg);
 
-	if(DEBUGMODE)
+	//eventsArray = getEventsFromFile(fileNameInput, numEvents);	
+	
+	int numEvents = 0;
+	
+	std::cout << "Reading input file " << std::endl;
+	while( getline(eventsFile, line) && numEvents < NUMEVENTS)
 	{
-		std::cout << "[debug in Run] : Done setting initial values " << std::endl;
-
-		std::cout << "[debug in Run] : Max window value " << maxWindow << std::endl;
-
-
-	}
-
-	Event *currentEvent = new Event(0, 0, 0, 0);
-	cSurf = EventMatrix<Event> (width, height, *currentEvent);
-
-	  if (eventsFile.is_open())
-	  {
-		getline (eventsFile,line);
 		std::stringstream stream(line);
 
 		stream >> x;
 		stream >> y;
 		stream >> time_;
 		stream >> pol;
+		
+		X.push_back(x);
+		Y.push_back(y);
+		T.push_back(time_);
+		POL.push_back(pol);
+		
+		numEvents++;
+	}
+	
+	eventsFile.close();
+	NUMEVENTS = numEvents;
 
-		currentEvent->setX(x);
-		currentEvent->setY(y);
-		currentEvent->setStamp(time_);
-		currentEvent->setPolarity(pol);
+	std::cout << "Done reading " << numEvents << " Events." << std::endl;	
+	unsigned int t0 = T.at(0);
 
-		if(DEBUGMODE)
-		{
-			std::cout << "[debug in Run] : First event " << std::endl;
-		}
-		unsigned int t0 = time_;
+	std::cout << "First time = " << t0 << std::endl;
+	
+	std::cout << "Processing events " << std::endl;
 
-		std::cout << "First time = " << t0 << std::endl;
 
-		if(DEBUGMODE)
-		{
-			std::cout << "[debug in Run] : First event - initial event [x y p t]: [" << x << " " << y << " " << pol << " " << time_ << "]" << std::endl;
-		}
-		lastEventTime[x][y] = time_;
+//	if(DEBUGMODE)
+//	{
+//		std::cout << "[debug in Run] : Done setting initial values " << std::endl;
+//
+//		std::cout << "[debug in Run] : Max window value " << maxWindow << std::endl;
+//
+//
+//	}
 
-		if(DEBUGMODE)
-		{
-			std::cout << "[debug in Run] : While events loop - Set up lastEventTime[x][y] " << std::endl;
-		}
+	Event *currentEvent = new Event(0, 0, 0, 0);
+	cSurf = EventMatrix<Event> (width, height, *currentEvent);
 
-	    while (getline (eventsFile,line) && eventsComputed <= NUMEVENTS)
-	    {
+	
+	const auto startComputation     = std::chrono::system_clock::now();
 
-			std::stringstream stream(line);
+    // transform the time into a duration since the epoch
+    const auto startComputationEpoch   = startComputation.time_since_epoch();
 
-			stream >> x;
-			stream >> y;
-			stream >> time_;
+    // cast the duration into seconds
+    const auto startComputationMicroSeconds = std::chrono::duration_cast<std::chrono::microseconds>(startComputationEpoch);
+
+
+	for (int evn = 0; evn < NUMEVENTS; evn++)
+	{ 
+		
+
+
+//		if(DEBUGMODE)
+//		{
+//			std::cout << "[debug in Run] : First event - initial event [x y p t]: [" << x << " " << y << " " << pol << " " << time_ << "]" << std::endl;
+//		}
+
+//		if(DEBUGMODE)
+//		{
+//			std::cout << "[debug in Run] : While events loop - Set up lastEventTime[x][y] " << std::endl;
+//		}
+
+			x = X.at(evn);
+			y = Y.at(evn);
+			time_ = T.at(evn);
 			time_ = time_ - t0;
-
-			stream >> pol;
+			
+			//if(time_ - previous_time_ > 1000)
+	
+			pol = POL.at(evn);
 			if(pol < 0)
 				pol = 0;
 			//pol = pol+1;
+
 
 			currentEvent->setX(x);
 			currentEvent->setY(y);
 			currentEvent->setStamp(time_);
 			currentEvent->setPolarity(pol);
 
-			if(DEBUGMODE)
-			{
-				std::cout << "[debug in Run] : Set current event " << std::endl;
-			}
+
+//			if(DEBUGMODE)
+//			{
+//				std::cout << "[debug in Run] : Set current event " << std::endl;
+//			}
 
 			lastEvent = *currentEvent;
+				
+			lastEventTime[x][y] = time_;
 
-			//cSurf[x][y] = *currentEvent;
+
+			cSurf[x][y] = *currentEvent;
 			//cSurf.setMostRecent(*currentEvent);
 
-			if(pol == 1)
-			{
+			//if(pol == 1)
+			//{
 				surfaceOnL[x][y] = *currentEvent;
-        surfaceOfL[x][y] = *currentEvent;
+				surfaceOfL[x][y] = *currentEvent;
+				
+//std::cout << "cSurf update" << std::endl;				
+
+//				cSurf[x][y] = *currentEvent;
 				//cSurf.clear();
 				//cSurf.resize(width, height, 0);
-				cSurf = surfaceOnL;
-			}
-			else
-			{
-				surfaceOfL[x][y] = *currentEvent;
-        surfaceOnL[x][y] = *currentEvent;
+				//cSurf = surfaceOnL;
+			//}
+			//else
+			//{
+			//	surfaceOfL[x][y] = *currentEvent;
+		//		surfaceOnL[x][y] = *currentEvent;
 				//cSurf.resize(width, height, currentEvent);
-		    cSurf = surfaceOfL;
-			}
+				
+
+
+				
+//				cSurf = surfaceOfL;
+			//}
 			i++;
+
 
 
 			//cSurf.setMostRecent(currentEvent);
 			//std::cout << "Computing flow" << std::endl;
 
 			//if(pol == 0)
-			FlowEvent ofe = computeLocalFlow();
+
+//std::cout << "before local flow" << std::endl;					
+
+	FlowEvent ofe = computeLocalFlow();
+
+
+
+//std::cout << "after local flow" << std::endl;					
+
+
+	//std::cout << durationEvents_ << std::endl;
+//	durationEvents+= durationEvents_;
+
 
 	    if(!std::isnan(abs(ofe.getVx())) && !std::isnan(abs(ofe.getVy())) && ofe.getVx() != 0 && ofe.getVy() != 0) // check that optical flow event is valid
 			{
@@ -255,23 +327,23 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 				//std::cout << x << " " << y << " " << pol << " " << length << " " << theta << std::endl;
 
 
- 			  if(pol == 1) // ON EVENTS
-				{
+// 			  if(pol == 1) // ON EVENTS
+//				{
 					//cSurf = surfaceOnL;
-					flowSurfaceLengthOn[x][y] = length;
-					flowSurfaceThetaOn[x][y] = theta;
+//					flowSurfaceLengthOn[x][y] = length;
+//					flowSurfaceThetaOn[x][y] = theta;
 
-					flowSurfaceVx[x][y] = ofe.getVx();
-					flowSurfaceVy[x][y] = ofe.getVy();
+//					flowSurfaceVx[x][y] = ofe.getVx();
+//					flowSurfaceVy[x][y] = ofe.getVy();
 
-					flowSurfaceLengthOf[x][y] = length;
-					flowSurfaceThetaOf[x][y] = theta;
+//					flowSurfaceLengthOf[x][y] = length;
+//					flowSurfaceThetaOf[x][y] = theta;
 
 					//double theta_0_2pi = theta - floor(theta/(2*M_PI))*theta;
 					//flowSurfaceThetaOn(x, y) = theta_0_2pi;
 
-				}
-				else // OFF EVENTS
+//				}
+//				else // OFF EVENTS
 				{
 					//cSurf = surfaceOfL;
 					flowSurfaceLengthOn[x][y] = length;
@@ -284,21 +356,384 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 					flowSurfaceVy[x][y] = ofe.getVy();
 				}
 
+
+
+
 				FlowEvent trueFlow = computeTrueFlow(x, y, time_, pol);
 
-        double trueLength = sqrt(trueFlow.getVy()*trueFlow.getVy() + trueFlow.getVx()*trueFlow.getVx());
-        double trueAngle = atan2(trueFlow.getVy(), trueFlow.getVx());
+
+	double trueLength = sqrt(trueFlow.getVy()*trueFlow.getVy() + trueFlow.getVx()*trueFlow.getVx());
+	double trueAngle = atan2(trueFlow.getVy(), trueFlow.getVx());
+
+				//std::cout << "{DEBUG}: Compute true flow (" <<  trueFlow.getVx() << " " << trueFlow.getVy() << ")" << std::endl;
+
+					X_out.push_back(x);
+					Y_out.push_back(y);
+					P_out.push_back(pol);
+					T_out.push_back(time_);
+					RLocal_out.push_back(length);
+					ThetaLocal_out.push_back(theta);
+					RTrue_out.push_back(trueLength);
+					ThetaTrue_out.push_back(trueAngle);
+					Vx_out.push_back(ofe.getVx());
+					Vy_out.push_back(ofe.getVy());
+					SpatialWindow.push_back(trueFlow.getScale());
+					
+					
+			}
+			else{
+				
+					X_out.push_back(x);
+					Y_out.push_back(y);
+					P_out.push_back(pol);
+					T_out.push_back(time_);
+					RLocal_out.push_back(0);
+					ThetaLocal_out.push_back(0);
+					RTrue_out.push_back(0);
+					ThetaTrue_out.push_back(0);
+					Vx_out.push_back(ofe.getVx());
+					Vy_out.push_back(ofe.getVy());
+					SpatialWindow.push_back(0);
+					
+					flowSurfaceLengthOn[x][y] = 0;
+					flowSurfaceThetaOn[x][y] = 0;
+					
+					flowSurfaceLengthOf[x][y] = 0;
+					flowSurfaceThetaOf[x][y] = 0;
+			}
+
+//			std::cout << aep->getPolarity() << std::endl;
+
+			lastEventTime[x][y] = time_;			
+			eventsComputed++;			
+			this->numEvents = eventsComputed;
+			//std::cout << "Percentage complete: " << double((100*eventsComputed)/(NUMEVENTS)) << "%" << " "  << '\r';
+// get the current time
+
+
+	    }
+	    
+	const auto endComputation     = std::chrono::system_clock::now();
+
+    // transform the time into a duration since the epoch
+    const auto endComputationEpoch   = endComputation.time_since_epoch();
+
+    // cast the duration into seconds
+    const auto endComputationMicroSeconds = std::chrono::duration_cast<std::chrono::microseconds>(endComputationEpoch);
+	durationEvents = endComputationMicroSeconds.count() - startComputationMicroSeconds.count();
+
+
+	//removing write to file for now
+	 std::cout << std::endl << "Done processing!" << std::endl;
+	 //exit(0);
+
+	 std::cout << std::endl << "Writing output file." << std::endl;
+
+	//removing write to file for now
+	std::ofstream eventsFileOut;
+	eventsFileOut.open (outFileName.c_str());
+
+	for (int outevn = 0; outevn < NUMEVENTS; outevn++)
+	{
+		eventsFileOut << X_out.at(outevn) << " " << Y_out.at(outevn) << " " << T_out.at(outevn) << " " << P_out.at(outevn) << " " << RTrue_out.at(outevn) << " " << ThetaTrue_out.at(outevn) << " " << Vx_out.at(outevn) << " " << Vy_out.at(outevn) << " " << RLocal_out.at(outevn) << " " << ThetaLocal_out.at(outevn) << " " << SpatialWindow.at(outevn) << std::endl;
+		
+	}
+
+	eventsFileOut.close();
+
+    //std::string inPortName = "/" + moduleName + "/vBottl:i";
+    //bool check1 = BufferedPort<emorph::vBottle>::open(inPortName);
+
+    //if(strictness) outPort.setStrict();
+    //std::string outPortName = "/" + moduleName + "/vBottle:o";
+    //bool check2 = outPort.open(outPortName);
+
+//    Eigen::MatrixXd q = new Eigen::MatrixXd()
+//    vf = new Eigen::VectorXd();
+ //       vf->setVx(dtdx);
+ //      vf->setVy(dtdy);
+ //       vf->setDeath();
+
+    return durationEvents; //check1 && check2;
+
+
+}
+
+
+
+/******************************************************************************/
+ long vFlowManager::run(unsigned long int NUMEVENTS)
+{
+
+	long durationEventsLocalShow = 0;
+	long durationEvents = 0;
+	long durationEventsTrueShow = 0;
+	
+	FlowEvent *vf;
+	vf =  new FlowEvent(0, 0, 0, 0, 0, 0);
+
+	FlowEvent trueFlow = *vf;
+
+	//if(DEBUGMODE)
+	//{
+//		std::cout << "[debug] : Begin run" << std::endl;
+
+//		std::cout << "[debug in Run] : Setting up initial values " << std::endl;
+//	}
+
+	std::string outFileName = "";
+	outFileName = fileNameInput + "_FARMSOut_bench_500us.txt";
+
+	//removing write to file for now
+	//std::ofstream eventsFileOut;
+	//eventsFileOut.open (outFileName.c_str());
+
+
+	double i = 0;
+	int x; int y; unsigned int time_; int pol;
+	unsigned int previous_time_ = 0;
+
+	fileNameInput = fileNameInput + ".txt";
+	std::string line;
+
+	std::cout << fileNameInput << std::endl;
+	
+	
+
+	std::ifstream eventsFile (fileNameInput.c_str());
+
+  	eventsFile.seekg(0, std::ios::beg);
+	std::streampos fsize = eventsFile.tellg();
+	eventsFile.seekg( 0, std::ios::end );
+	fsize = eventsFile.tellg() - fsize;
+
+
+  	NUMEVENTS = (unsigned long int) (std::min(double(NUMEVENTS), double(fsize/18)));
+
+	eventsFile.seekg(0, std::ios::beg);
+
+//	if(DEBUGMODE)
+//	{
+//		std::cout << "[debug in Run] : Done setting initial values " << std::endl;
+//
+//		std::cout << "[debug in Run] : Max window value " << maxWindow << std::endl;
+//
+//
+//	}
+
+	Event *currentEvent = new Event(0, 0, 0, 0);
+	cSurf = EventMatrix<Event> (width, height, *currentEvent);
+
+
+
+	  if (eventsFile.is_open())
+	  {
+		getline (eventsFile,line);
+		std::stringstream stream(line);
+
+		stream >> x;
+		stream >> y;
+		stream >> time_;
+		stream >> pol;
+		
+		previous_time_ = time_;
+
+		currentEvent->setX(x);
+		currentEvent->setY(y);
+		currentEvent->setStamp(time_);
+		currentEvent->setPolarity(pol);
+
+//		if(DEBUGMODE)
+//		{
+//			std::cout << "[debug in Run] : First event " << std::endl;
+//		}
+		unsigned int t0 = time_;
+
+		std::cout << "First time = " << t0 << std::endl;
+
+//		if(DEBUGMODE)
+//		{
+//			std::cout << "[debug in Run] : First event - initial event [x y p t]: [" << x << " " << y << " " << pol << " " << time_ << "]" << std::endl;
+//		}
+		lastEventTime[x][y] = time_;
+
+//		if(DEBUGMODE)
+//		{
+//			std::cout << "[debug in Run] : While events loop - Set up lastEventTime[x][y] " << std::endl;
+//		}
+
+	    while (getline (eventsFile,line) && eventsComputed <= NUMEVENTS)
+	    {
+
+			std::stringstream stream(line);
+
+			stream >> x;
+			stream >> y;
+			stream >> time_;
+			time_ = time_ - t0;
+			
+			//if(time_ - previous_time_ > 1000)
+	
+			stream >> pol;
+			if(pol < 0)
+				pol = 0;
+			//pol = pol+1;
+
+			currentEvent->setX(x);
+			currentEvent->setY(y);
+			currentEvent->setStamp(time_);
+			currentEvent->setPolarity(pol);
+
+//			if(DEBUGMODE)
+//			{
+//				std::cout << "[debug in Run] : Set current event " << std::endl;
+//			}
+
+			lastEvent = *currentEvent;
+
+			//cSurf[x][y] = *currentEvent;
+			//cSurf.setMostRecent(*currentEvent);
+
+			//if(pol == 1)
+			//{
+				surfaceOnL[x][y] = *currentEvent;
+				surfaceOfL[x][y] = *currentEvent;
+				//cSurf.clear();
+				//cSurf.resize(width, height, 0);
+			//	cSurf = surfaceOnL;
+			//}
+			//else
+			//{
+			//	surfaceOfL[x][y] = *currentEvent;
+		//		surfaceOnL[x][y] = *currentEvent;
+				//cSurf.resize(width, height, currentEvent);
+				cSurf = surfaceOfL;
+			//}
+			i++;
+
+
+			//cSurf.setMostRecent(currentEvent);
+			//std::cout << "Computing flow" << std::endl;
+
+			//if(pol == 0)
+		
+	const auto startComputation     = std::chrono::system_clock::now();
+
+    // transform the time into a duration since the epoch
+    const auto startComputationEpoch   = startComputation.time_since_epoch();
+
+    // cast the duration into seconds
+    const auto startComputationMicroSeconds = std::chrono::duration_cast<std::chrono::microseconds>(startComputationEpoch);
+
+
+			FlowEvent ofe = computeLocalFlow();
+
+	const auto endComputation     = std::chrono::system_clock::now();
+
+    // transform the time into a duration since the epoch
+    const auto endComputationEpoch   = endComputation.time_since_epoch();
+
+    // cast the duration into seconds
+    const auto endComputationMicroSeconds = std::chrono::duration_cast<std::chrono::microseconds>(endComputationEpoch);
+	long durationEvents_ = endComputationMicroSeconds.count() - startComputationMicroSeconds.count();
+
+	durationEventsLocalShow += durationEvents_;
+	std::cout << "Local " << durationEvents_ << " " << durationEventsLocalShow << std::endl;
+
+	//std::cout << durationEvents_ << std::endl;
+	durationEvents+= durationEvents_;
+
+
+
+	    if(!std::isnan(abs(ofe.getVx())) && !std::isnan(abs(ofe.getVy())) && ofe.getVx() != 0 && ofe.getVy() != 0) // check that optical flow event is valid
+			{
+
+
+			    const auto startComputationTrue     = std::chrono::system_clock::now();
+
+				// transform the time into a duration since the epoch
+				const auto  startComputationEpochTrue   = startComputationTrue.time_since_epoch();
+
+				// cast the duration into seconds
+				const auto  startComputationMicroSecondsTrue = std::chrono::duration_cast<std::chrono::microseconds>(startComputationEpochTrue);
+	
+
+				//std::cout << pol << std::endl;
+				//std::cout << "Got flow" << " ";
+				//std::cout << "vFlow event occurd " << ofe[0] << std::endl;
+				//std::cout << "Percentage complete: " << int((i*100*18.37)/(fsize)) << "%" << " "  << '\r';
+				// basic file operations
+
+				double length = sqrt( (ofe.getVx()*ofe.getVx() + ofe.getVy()*ofe.getVy()));
+				double theta = atan2(ofe.getVy(), ofe.getVx());
+
+				//std::cout << x << " " << y << " " << pol << " " << length << " " << theta << std::endl;
+
+
+// 			  if(pol == 1) // ON EVENTS
+//				{
+					//cSurf = surfaceOnL;
+//					flowSurfaceLengthOn[x][y] = length;
+//					flowSurfaceThetaOn[x][y] = theta;
+
+//					flowSurfaceVx[x][y] = ofe.getVx();
+//					flowSurfaceVy[x][y] = ofe.getVy();
+
+//					flowSurfaceLengthOf[x][y] = length;
+//					flowSurfaceThetaOf[x][y] = theta;
+
+					//double theta_0_2pi = theta - floor(theta/(2*M_PI))*theta;
+					//flowSurfaceThetaOn(x, y) = theta_0_2pi;
+
+//				}
+//				else // OFF EVENTS
+				{
+					//cSurf = surfaceOfL;
+					flowSurfaceLengthOn[x][y] = length;
+					flowSurfaceThetaOn[x][y] = theta;
+
+					flowSurfaceLengthOf[x][y] = length;
+					flowSurfaceThetaOf[x][y] = theta;
+
+					flowSurfaceVx[x][y] = ofe.getVx();
+					flowSurfaceVy[x][y] = ofe.getVy();
+				}
+
+
+
+				FlowEvent trueFlow = computeTrueFlow(x, y, time_, pol);
+
+				double trueLength = sqrt(trueFlow.getVy()*trueFlow.getVy() + trueFlow.getVx()*trueFlow.getVx());
+				double trueAngle = atan2(trueFlow.getVy(), trueFlow.getVx());
+
+	const auto endComputationTrue     = std::chrono::system_clock::now();
+
+    // transform the time into a duration since the epoch
+    const auto endComputationEpochTrue   = endComputationTrue.time_since_epoch();
+
+    // cast the duration into seconds
+    const auto endComputationMicroSecondsTrue = std::chrono::duration_cast<std::chrono::microseconds>(endComputationEpochTrue);
+	int durationEventsTrue_ = endComputationMicroSecondsTrue.count() - startComputationMicroSecondsTrue.count();
+	
+	durationEventsTrueShow += durationEventsTrue_;
+	std::cout << "true " << durationEventsTrue_ << " " << durationEventsTrueShow << std::endl;
+
+	
+				//std::cout << durationEventsTrue_ << std::endl;
+	durationEvents+= durationEventsTrue_;
 
 				//std::cout << "{DEBUG}: Compute true flow (" <<  trueFlow.getVx() << " " << trueFlow.getVy() << ")" << std::endl;
 
 				if(pol == 1)
 				{
-					eventsFileOut << x << " " << y << " " << time_ << " " << 1 << " " << length << " " << trueAngle << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
+					//removing write to file for now
+					/////// eventsFileOut << x << " " << y << " " << time_ << " " << 1 << " " << length << " " << trueAngle << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
 					//std::cout << "{DEBUG}: Writing to file " << x << " " << y << " " << time_ << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
 				}
 				else
-        {
-					eventsFileOut << x << " " << y << " " << time_ << " " << -1 << " " << length << " " << trueAngle << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
+				{
+					//removing write to file for now
+					////eventsFileOut << x << " " << y << " " << time_ << " " << -1 << " " << length << " " << trueAngle << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
 					//std::cout << "{DEBUG}: Writing to file " << x << " " << y << " " << time_ << " " << 1 << " " << length << " " << trueFlow.getVy() << " " << ofe.getVx() << " " << ofe.getVy() << " " << length << " " << theta << std::endl;
 				}
 
@@ -319,23 +754,35 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 			else{
 
 				if(pol ==1)
-					eventsFileOut << x << " " << y << " " << time_ << " " << 1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
-				else
-					eventsFileOut << x << " " << y << " " << time_ << " " << -1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
-
-
-				 /*
-				if(pol == 1)
 				{
+				//removing write to file for now
+						////eventsFileOut << x << " " << y << " " << time_ << " " << 1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
+					}
+				else
+				{
+				//removing write to file for now
+					////eventsFileOut << x << " " << y << " " << time_ << " " << -1 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << " " << 0 << std::endl;
+				}
+
+
+			//	 /*
+//				if(pol == 1)
+//				{
 					flowSurfaceLengthOn[x][y] = 0;
 					flowSurfaceThetaOn[x][y] = 0;
-				}
-				else
-				{
+					
 					flowSurfaceLengthOf[x][y] = 0;
 					flowSurfaceThetaOf[x][y] = 0;
-				}
-					// */
+//				}
+//				else
+//				{
+//					flowSurfaceLengthOn[x][y] = 0;
+//					flowSurfaceThetaOn[x][y] = 0;
+					
+//					flowSurfaceLengthOf[x][y] = 0;
+//					flowSurfaceThetaOf[x][y] = 0;
+//				}
+//					// */
 			}
 
 //			std::cout << aep->getPolarity() << std::endl;
@@ -344,12 +791,18 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
 			eventsComputed++;			
 			this->numEvents = eventsComputed;
 			//std::cout << "Percentage complete: " << double((100*eventsComputed)/(NUMEVENTS)) << "%" << " "  << '\r';
+// get the current time
+    
+	
+
 	    }
+
 	    eventsFile.close();
 	  }
 	 else std::cout << "Unable to open file" << std::endl;
 
-	 eventsFileOut.close();
+	//removing write to file for now
+	////	eventsFileOut.close();
 	 std::cout << std::endl << "Done!" << std::endl;
 	 //exit(0);
 
@@ -367,7 +820,7 @@ bool vFlowManager::run(unsigned long int NUMEVENTS)
  //      vf->setVy(dtdy);
  //       vf->setDeath();
 
-    return true; //check1 && check2;
+    return durationEvents; //check1 && check2;
 
 
 }
@@ -388,20 +841,20 @@ void vFlowManager::close()
 FlowEvent vFlowManager::computeLocalFlow()
 {
 
-	if(DEBUGMODE)
-	{
-		std::cout << "[debug in (compute)] : Entering compute()" << std::endl;
-	}
+//	if(DEBUGMODE)
+//	{
+//		std::cout << "[debug in (compute)] : Entering compute()" << std::endl;
+//	}
 
     FlowEvent *vf;
     vf =  new FlowEvent(0, 0, 0, 0, 0, 0);
     double dtdy = 0, dtdx = 0;
 
     //get the most recent event
-	if(DEBUGMODE)
-	{
-		std::cout << "[debug in (compute)] : made proxy flow event vf" << std::endl;
-	}
+//	if(DEBUGMODE)
+//	{
+//		std::cout << "[debug in (compute)] : made proxy flow event vf" << std::endl;
+//	}
     //Event vr = cSurf.getMostRecent(); //->getAs<Event>();
 
 	Event vr = lastEvent;
@@ -411,6 +864,9 @@ FlowEvent vFlowManager::computeLocalFlow()
     double bestscore = MAXSTAMP+1;
     int besti = 0, bestj = 0;
 
+	
+//	std::cout << "{DEBUG} " << "Local flow : before for loop " << " " << vr.getX() << " " << vr.getY() << std::endl;
+	
     for(int i = vr.getX()-fRad; i <= vr.getX()+fRad; i+=fRad)
     {
         for(int j = vr.getY()-fRad; j <= vr.getY()+fRad; j+=fRad)
@@ -418,18 +874,18 @@ FlowEvent vFlowManager::computeLocalFlow()
             //get the surface around the recent event
             double sobeltsdiff = 0;
             std::vector<Event> subsurf;
-
-            for(int cx_ = i-fRad; cx_ <= i+fRad; cx_++)
+            
+            for(int cx_ = std::max(0, i-fRad); cx_ <= std::min(cSurf.dim_a()-1, i+fRad); cx_++)
             {
-              for(int cy_ = j-fRad; cy_ <= j+fRad; cy_++)
+              for(int cy_ = std::max(0, j-fRad); cy_ <= std::min(cSurf.dim_b()-1, j+fRad); cy_++)
               {
-                subsurf.push_back(cSurf[cx_][cy_]);
+					subsurf.push_back(cSurf[cx_][cy_]);
               }
             } // = cSurf->getSurf(i, j, fRad);
 
-//			std::cout << "[DEBUG in compute]: cSurf of center [cx cy]: " << cSurf[besti][bestj].getX() << " " << std::endl;
+	//		if(vr.getX() == 1)
+	//		std::cout << "{DEBUG} " << subsurf.size() << " " << planeSize << std::endl;
 
-//std::cout << "{DEBUG} " << subsurf.size() << " " << planeSize << std::endl;
             if(subsurf.size() < planeSize) continue;
 
             for(unsigned int k = 0; k < subsurf.size(); k++)
@@ -465,9 +921,9 @@ FlowEvent vFlowManager::computeLocalFlow()
 //std::cout << "[DEBUG in compute]: cSurf of center [cx cy]: " << besti << " " << bestj << std::endl;
 
         std::vector< Event > subsurf;
-        for(int cx_ = besti-fRad; cx_ <= besti+fRad; cx_++)
+        for(int cx_ = std::max(0, besti-fRad); cx_ <= besti+fRad; cx_++)
         {
-          for(int cy_ = bestj-fRad; cy_ <= bestj+fRad; cy_++)
+          for(int cy_ = std::max(0, bestj-fRad); cy_ <= bestj+fRad; cy_++)
           {
             subsurf.push_back(cSurf[cx_][cy_]);
           }
@@ -477,17 +933,18 @@ FlowEvent vFlowManager::computeLocalFlow()
     //and compute the flow
         if(computeGrads(subsurf, vr, dtdy, dtdx) >= minEvtsOnPlane) //if inliers more than threshold set flow
         {
-          //std::cout << "compute grad " << vr[0] << " " << vr[1] << " " << vr->getPolarity() << std::endl;
+          
           vf = new FlowEvent(vr.getX(), vr.getY(), vr.getStamp(), vr.getPolarity(), 0, 0);
           vf->setVx(dtdx);
           vf->setVy(dtdy);
+          //std::cout << "compute grad " << dtdy << " " << dtdx << " " << vr.getPolarity() << std::endl;
         //vf.setDeath();
         }
 
-        if(DEBUGMODE)
-        {
-          std::cout << "[debug] : Exiting compute()" << std::endl;
-        }
+  //      if(DEBUGMODE)
+    //    {
+      //    std::cout << "[debug] : Exiting compute()" << std::endl;
+//        }
         return *vf;
 }
 
@@ -495,13 +952,13 @@ FlowEvent vFlowManager::computeLocalFlow()
 FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, int pol)
 {
 
-	if(DEBUGMODE)
-	{
-		std::cout << "[debug] : Entering computeTrueFlow(timed)" << std::endl;
-	}
+//	if(DEBUGMODE)
+//	{
+//		std::cout << "[debug] : Entering computeTrueFlow(timed)" << std::endl;
+//	}
 
 	//std::cout << "in compute true flow time_ based" << std::endl;
-	double KILL_OLD_FLOW_TIME = 5000;
+	double KILL_OLD_FLOW_TIME = 500;
 
 	FlowEvent *outFlow =  new FlowEvent(x, y, timeEvent_, pol, 0, 0);
 	//outFlow = Eigen::VectorXd(2);
@@ -513,16 +970,18 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
 	std::vector<double> spatialVectorX(maxWindow, 0);
 
 	std::vector<double> spatialVectorY(maxWindow, 0);
+
 	//int windowJump = 1;
 	//int maxWindow = 8; // declared as global now
 
+	std::vector<double> scaleValue;
 
 	//std::cout << "On event true copmpute" << std::endl;
 	double maxLength = 0;
 	double bestTheta = 0;
 
 	double numWindows = 0;
-
+	
   if(pol == 1)
   {
   	for (int spatialSize = 0; spatialSize <= maxWindow; spatialSize+=windowJump)
@@ -576,6 +1035,11 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
   			spatialVectorY.at(numWindows) = 0;
   		}
 
+//		std::cout << "Set scale " <<  spatialSize << std::endl;
+		scaleValue.push_back(spatialSize);
+//		std::cout << "index" <<  numWindows << std::endl;
+
+		
   		//std::cout << spatialPool(numWindows) << " " ;
   		numWindows++;
   	}
@@ -607,24 +1071,26 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
 
       outFlow->setVx(spatialVectorX.at(maxValIndex));
       outFlow->setVy(spatialVectorY.at(maxValIndex));
+
+      outFlow->setScale(scaleValue.at(maxValIndex));
       //outFlow->setVx(maxLength);
   		//outFlow->setVy(bestTheta);
 
-  		if(DEBUGMODE)
-  		{
-  			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << atan2(spatialVectorY.at(maxValIndex), spatialVectorX.at(maxValIndex)) << std::endl;
-  		}
+//  		if(DEBUGMODE)
+  //		{
+  //			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << atan2(spatialVectorY.at(maxValIndex), spatialVectorX.at(maxValIndex)) << std::endl;
+  //		}
 
   	}
   	else
   	{
   		outFlow->setVx(flowSurfaceLengthOn[x][y]*cos(flowSurfaceThetaOn[x][y]));
   		outFlow->setVy(flowSurfaceLengthOn[x][y]*sin(flowSurfaceThetaOn[x][y]));
-
-  		if(DEBUGMODE)
-  		{
-  			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << flowSurfaceLengthOn[x][y] << " " << flowSurfaceThetaOn[x][y] << std::endl;
-  		}
+        outFlow->setScale(0);
+  //		if(DEBUGMODE)
+  //		{
+  //			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << flowSurfaceLengthOn[x][y] << " " << flowSurfaceThetaOn[x][y] << std::endl;
+  //		}
   	}
   }
 
@@ -672,6 +1138,7 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
   			spatialTheta.at(numWindows) = thetaSpatial/numNeighbors; //bestTheta; //
   			spatialVectorX.at(numWindows) = spatialX/numNeighbors;
   			spatialVectorY.at(numWindows) = spatialY/numNeighbors;
+  			
   		}
   		else
   		{
@@ -680,7 +1147,8 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
   			spatialVectorX.at(numWindows) = 0;
   			spatialVectorY.at(numWindows) = 0;
   		}
-
+//		scaleValue.at(numWindows) = spatialSize;
+		scaleValue.push_back(spatialSize);
   		//std::cout << spatialPool(numWindows) << " " ;
   		numWindows++;
   	}
@@ -707,14 +1175,14 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
   	{
   		outFlow->setVx(spatialVectorX.at(maxValIndex));
   		outFlow->setVy(spatialVectorY.at(maxValIndex));
-
+		outFlow->setScale(scaleValue.at(maxValIndex));
       //outFlow->setVx(maxLength);
   		//outFlow->setVy(bestTheta);
 
-  		if(DEBUGMODE)
-  		{
-  			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << atan2(spatialVectorY.at(maxValIndex), spatialVectorX.at(maxValIndex)) << std::endl;
-  		}
+  //		if(DEBUGMODE)
+  //		{
+  //			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << atan2(spatialVectorY.at(maxValIndex), spatialVectorX.at(maxValIndex)) << std::endl;
+  //		}
 
   	}
   	else  // if now assign the same as original flow
@@ -722,10 +1190,10 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
   		outFlow->setVx(flowSurfaceLengthOf[x][y]*cos(flowSurfaceThetaOf[x][y]));
   		outFlow->setVy(flowSurfaceLengthOf[x][y]*sin(flowSurfaceThetaOf[x][y]));
 
-  		if(DEBUGMODE)
-  		{
-  			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << flowSurfaceLengthOn[x][y] << " " << flowSurfaceThetaOn[x][y] << std::endl;
-  		}
+  //		if(DEBUGMODE)
+  //		{
+  //			std::cout <<  "[debug] in computeTrueFlow(timed): Set angle " << " " << flowSurfaceLengthOn[x][y] << " " << flowSurfaceThetaOn[x][y] << std::endl;
+  //		}
   	}
 
   }
@@ -733,10 +1201,10 @@ FlowEvent vFlowManager::computeTrueFlow(int x, int y, unsigned int timeEvent_, i
 
 	//std::cout << maxVal << " " << maxValIndex << " " << std::endl;
 
-	if(DEBUGMODE)
-	{
-		std::cout << "[debug] : Exiting computeTrueFlow(timed)" << std::endl;
-	}
+//	if(DEBUGMODE)
+//	{
+//		std::cout << "[debug] : Exiting computeTrueFlow(timed)" << std::endl;
+//	}
 	return *outFlow;
 
 }
