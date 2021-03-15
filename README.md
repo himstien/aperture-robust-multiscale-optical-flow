@@ -58,9 +58,9 @@ Parameter list:
 	--numEvents arg       set max number of events to process
 
 
-Input event files: txt files with N rows for each event storing events as: x y p t.
+Input event files: txt files with N rows for each event storing events as: x y t p.
 
-Output files: with suffix _FARMSOut_ with N rows for each event storing flow events as: x y p t globalR globalTheta localR localTheta
+Output files: with suffix _FARMSOut_ with N rows for each event storing flow events as: x y t p globalR globalTheta localR localTheta
 
 
 Send Queries to : himanshu.akolkar@gmail.com (or use the bitbucket ticketing)
