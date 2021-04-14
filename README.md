@@ -62,5 +62,9 @@ Input event files: txt files with N rows for each event storing events as: x y t
 
 Output files: with suffix _FARMSOut_ with N rows for each event storing flow events as: x y t p globalR globalTheta localR localTheta
 
+************************************************************************************************************************************
+Please cite as:
+H. Akolkar, S. H. Ieng and R. Benosman, "Real-time high speed motion prediction using fast aperture-robust event-driven visual flow," in IEEE Transactions on Pattern Analysis and Machine Intelligence, doi: 10.1109/TPAMI.2020.3010468.
 
+************************************************************************************************************************************
 Send Queries to : himanshu.akolkar@gmail.com (or use the bitbucket ticketing)
