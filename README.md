@@ -67,4 +67,4 @@ Please cite as:
 H. Akolkar, S. H. Ieng and R. Benosman, "Real-time high speed motion prediction using fast aperture-robust event-driven visual flow," in IEEE Transactions on Pattern Analysis and Machine Intelligence, doi: 10.1109/TPAMI.2020.3010468.
 
 ************************************************************************************************************************************
-Send Queries to : himanshu.akolkar@gmail.com (or use the bitbucket ticketing)
+Send Queries to : himanshu.akolkar@gmail.com (or use the github ticketing)
